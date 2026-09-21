@@ -6,7 +6,7 @@
 
 | Appendix | Holds |
 |---|---|
-| **A — Decision record** | Every decision, who made it, and where it is specified; the defaults adopted without discussion; how the document got here |
+| **A — Decision record** | Every decision, who made it, and where it is specified; the defaults adopted without discussion; how the document got here; what planning the implementation changed |
 | **B — Rationale** | The reasoning behind the design, by topic |
 | **C — Prior art** | How `top`, `ps`, and the kernel handle the same problems, read from Apple's source |
 | **D — Experiments** | The probes that settled open questions, with their source |
@@ -121,7 +121,7 @@ The header says nothing about core kinds.
 - The history starts as all zeros.
 - Each new load shifts the others one step left; the oldest is discarded.
 - When the view widens, the added steps hold zeros and are the oldest. When it narrows, the oldest loads are discarded first.
-- With no window open the history keeps its last step count. If no window has ever been open, it uses the first-launch window's step count.
+- With no window open the history keeps its last step count. At a launch with no window, it starts from the step count of the stored window width; if no width has ever been stored, from the first-launch window's.
 - The history is not saved between launches.
 
 *Rationale: B.4.*
@@ -234,15 +234,19 @@ kernel ──host_processor_info──▶ readProcessorTicks()                  
 
 ### 4.1 The pure core
 
-`internal`, `nonisolated`, `Sendable` value types in `App/Core/`.
+`internal`, `Sendable` value types in `App/Core/`. The app target defaults to `MainActor` isolation, so every top-level declaration in `App/Core/` — these types and the two readers — is marked `nonisolated`.
 
 | Type | Role | Invariant, and how it is enforced |
 |---|---|---|
 | `CPUTicks` | One CPU's four cumulative counters: user, system, idle, nice | — |
-| `CPULoad` | `user` and `system` fractions; `total` computed; `CPULoad.zero` | Each in 0…1 and `total` ≤ 1. Apart from `zero`, the only initializer takes two `CPUTicks`, so the invariant holds by construction. |
+| `TickDelta` | The ticks that elapsed between two samples: user (with nice folded in), system, and idle. One CPU's, or the sum of several | The per-CPU initializer takes two `CPUTicks` and subtracts in 32 bits with wrapping arithmetic before widening, so a counter wrap is harmless by construction. Deltas add, in 64 bits, which is how the machine-wide figure is formed. |
+| `CPULoad` | `user` and `system` fractions; `total` computed; `CPULoad.zero` | Each in 0…1 and `total` ≤ 1. Apart from `zero`, the only initializer takes a `TickDelta`, so the invariant holds by construction. A delta of zero ticks yields `zero`. |
+| `UsagePercentages` | The header's three whole percentages: user, system, idle | Each in 0…100, summing to exactly 100. The only initializer takes a `CPULoad` and rounds cumulatively (§5.4). |
 | `LoadHistory` | One CPU's retained loads, oldest first | **Always exactly `stepCount` loads.** `init(stepCount:)` is all zeros. `appending(_:)` drops the oldest and adds the newest, so the length cannot change. `resized(toStepCount:)` prepends zeros to grow and keeps the newest suffix to shrink. All three return new values. |
 | `SamplingPeriod` | Whole seconds; `presets`; `default` | 1…60, through failable initializers only — `init?(seconds:)` and `init?(text:)`. There is no way to construct an out-of-range period. |
-| `MonitorState` | The previous ticks, one `LoadHistory` per CPU, and the latest machine-wide load | `advanced(with: [CPUTicks])` is the entire per-sample logic as one pure function. `resized(toStepCount:)` maps the resize over every history. A change in the CPU count resets the baseline. |
+| `MonitorState` | The previous ticks, one `LoadHistory` per CPU, and the latest machine-wide load | `advanced(with: [CPUTicks])` is the entire per-sample logic as one pure function. `resized(toStepCount:)` maps the resize over every history. A change in the CPU count resets the baseline and replaces the histories with zeros at the current step count; the first sample is the same rule, going from no CPUs to N. |
+
+The scheduling rule is pure as well: given the previous deadline, the period, and the present instant, `nextDeadline` returns the following deadline, collapsing any that were missed (§5.8).
 
 Two impure readers complete the core: `readProcessorTicks()` (§5.6) and `readProcessorName()`, which returns the processor's name or `nil`.
 
@@ -250,11 +254,12 @@ Two impure readers complete the core: `readProcessorTicks()` (§5.6) and `readPr
 
 `LoadMonitor` is an `@Observable`, `@MainActor` class. It owns the sampling task, the period, the current `MonitorState`, and the last error. It is created and owned by the `App`, not by any view, so its lifetime is the process's.
 
-- **Its tick reader is passed in**: an initializer parameter of type `() throws(MachError) -> [CPUTicks]`, defaulting to `readProcessorTicks`. The monitor's own behavior can therefore be exercised with scripted ticks.
+- **Its two collaborators are passed in.** The tick reader is an initializer parameter of type `() throws(MachError) -> [CPUTicks]`, defaulting to `readProcessorTicks`. The sleep is a second, of type `(ContinuousClock.Instant) async throws -> Void`, defaulting to `Task.sleep(until:clock:)` on the continuous clock. With both scripted, the monitor's whole behavior — what it does with a failed read, with a changed CPU count, with a new period — is exercised deterministically and without waiting on a real clock.
+- **It persists nothing.** The `App` reads the stored period, hands it to the monitor, and stores it again when it changes. The monitor's tests run inside the app and share its real defaults, so a monitor that wrote its own period could change the user's setting during a test run.
 - **The step count flows up from the view.** `LoadStackView` measures its width, converts it to a step count with `LoadView.stepLength`, and reports it to the monitor, which resizes its state. This is the one place the model depends on view geometry, and it does so by design (§2.10).
 - **Views take values, not the monitor.** A parent reads what it needs from the monitor in its `body` and passes plain values down; `LoadView` receives one `LoadHistory`.
 
-*Rationale: B.4 (history), B.16 (the injected reader).*
+*Rationale: B.4 (history), B.16 (the injected reader), B.17 (the injected sleep; no persistence).*
 
 ## 5. Components
 
@@ -268,7 +273,8 @@ struct CPULoadMeterApp: App {
 	@AppStorage("isMainWindowOpenedAtLaunch") private var isMainWindowOpenedAtLaunch = true
 	@AppStorage("mainWindowWidth") private var mainWindowWidth: Double?
 	@AppStorage("mainWindowHeight") private var mainWindowHeight: Double?
-	@State private var monitor = LoadMonitor()
+	@AppStorage("samplingPeriodSeconds") private var samplingPeriodSeconds = SamplingPeriod.default.seconds
+	@State private var monitor: LoadMonitor
 
 	var body: some Scene {
 		Window("CPULoadMeter", id: "main") {
@@ -282,7 +288,9 @@ struct CPULoadMeterApp: App {
 		.windowStyle(.hiddenTitleBar)
 		.defaultLaunchBehavior(isMainWindowOpenedAtLaunch ? .presented : .suppressed)
 		.restorationBehavior(.disabled)
-		.defaultSize(launchSize)
+		.defaultWindowPlacement { content, _ in
+			WindowPlacement(size: storedWindowSize ?? content.sizeThatFits(.unspecified))
+		}
 
 		Settings {
 			SettingsView()
@@ -307,12 +315,15 @@ There is no `import AppKit` and no app delegate.
 **Remembering the window's size.** `restorationBehavior(.disabled)` makes the launch checkbox authoritative, and it also stops the system from saving the window's frame, so the app saves the size itself:
 
 - The content reports its size through `onGeometryChange`, and the app stores the width and height in `UserDefaults`. They are optionals rather than zero sentinels: absent means "never shown", and the type says so.
-- `launchSize` is the stored size when both halves are present, and otherwise the first-launch default (§2.5). It feeds `defaultSize`.
+- `storedWindowSize` is the stored size when both halves are present, and `nil` otherwise. `defaultWindowPlacement` places the window at that size, or else at the size the content asks for.
+- The first-launch size (§2.5) is therefore not a constant computed ahead of layout, which would need the header's height before the header exists. It is the content's own ideal size: `MainView` has an ideal width of 480 pt and each `LoadView` an ideal height of 20 pt, and the header contributes its natural height.
 - Within one run nothing more is needed: a closed window's object survives, hidden, and reopens as it was.
+
+The `App`'s initializer creates the monitor with the stored period and the initial step count (§2.10); it stores the period again whenever the monitor's changes.
 
 The menu bar extra receives the monitor now, unused, so that the later live graph is a change to one view rather than to the app's wiring.
 
-*Rationale: B.1, B.8. Experiments: D.2.*
+*Rationale: B.1, B.8, B.17 (the first-launch size). Experiments: D.2.*
 
 ### 5.2 The menu bar extra's menu
 
@@ -337,7 +348,11 @@ There is no `ScrollView` anywhere. The window's minimum size emerges from the co
 
 ### 5.4 The header
 
-`HeaderView` takes the processor name, the CPU count, the latest machine-wide `CPULoad` (optional), whether the last sample failed, and a binding to the period. The name is read once at launch. User and system are rounded to the nearest whole percent and idle is the remainder, so the three always sum to 100.
+`HeaderView` takes the processor name, the CPU count, the latest machine-wide `CPULoad` (optional), whether the last sample failed, and a binding to the period. The name is read once at launch.
+
+The three whole percentages come from `UsagePercentages`, which rounds cumulatively: *busy* is user plus system rounded to the nearest whole percent; *user* is user rounded; *system* is busy minus user; *idle* is 100 minus busy. Every figure is therefore non-negative and the three always sum to 100.
+
+*Rationale: B.5, B.17 (the rounding).*
 
 ### 5.5 LoadView
 
@@ -346,21 +361,21 @@ There is no `ScrollView` anywhere. The window's minimum size emerges from the co
 ```swift
 struct LoadView: View {
 	let history: LoadHistory
+	var lineWidth: CGFloat = 1
 
 	var body: some View {
 		Canvas { context, size in
 			let steps = history.loads.reversed().prefix(Int(size.width / Self.stepLength)).enumerated()
 			let path = steps.reduce(into: Path()) { path, step in
-				let x = size.width - (CGFloat(step.offset) * Self.stepLength) - (Self.lineWidth / 2)
+				let x = size.width - (CGFloat(step.offset) * Self.stepLength) - (lineWidth / 2)
 				path.move(to: CGPoint(x: x, y: size.height))
 				path.addLine(to: CGPoint(x: x, y: size.height * (1 - step.element.total)))
 			}
-			context.stroke(path, with: .color(.primary), lineWidth: Self.lineWidth)
+			context.stroke(path, with: .color(.primary), lineWidth: lineWidth)
 		}
 	}
 
-	static let stepLength: CGFloat = 1
-	private static let lineWidth: CGFloat = 1
+	nonisolated static let stepLength: CGFloat = 1
 }
 ```
 
@@ -370,7 +385,8 @@ The drawing rules:
 - **The y-axis points down.** The bottom edge is `y = size.height`, and a full-height line ends at `y = 0`.
 - **A line's center is a pixel boundary plus half the line width.** The right edge of step *k*'s line sits at `width − k × stepLength`, a whole point, and the center is half a line width to its left.
 - **One path and one stroke** per LoadView per redraw.
-- **`stepLength` is 1 pt. `lineWidth` starts at 1 pt**, which tiles the steps into a solid silhouette; its final value is chosen by eye against the running app (§8).
+- **`stepLength` is 1 pt. `lineWidth` defaults to 1 pt**, which tiles the steps into a solid silhouette; the default's final value is chosen by eye against the running app (§8). It is a parameter rather than a constant so that the rendering tests can exercise more than one width, and because the later menu-bar graph will want its own.
+- **`stepLength` is `nonisolated`** because `LoadStackView` reads it inside `onGeometryChange`'s transform, which runs off the main actor.
 
 *Rationale: B.3.*
 
@@ -380,7 +396,7 @@ The drawing rules:
 func readProcessorTicks() throws(MachError) -> [CPUTicks]
 ```
 
-`readProcessorTicks()` calls `host_processor_info(mach_host_self(), PROCESSOR_CPU_LOAD_INFO, …)`, copies each CPU's `processor_cpu_load_info` into a `CPUTicks` value with named fields, and returns the array. The failure is in the signature.
+`readProcessorTicks()` calls `host_processor_info` with the `PROCESSOR_CPU_LOAD_INFO` flavor, copies each CPU's `processor_cpu_load_info` into a `CPUTicks` value with named fields, and returns the array. The failure is in the signature. The host port is obtained once and reused, rather than asked for on every call.
 
 **The kernel allocates the reply buffer on every call, and this function frees it on every call.** The `vm_deallocate` is a `defer` inside this one function, unconditional, and the function returns a Swift array — so no unsafe pointer escapes, and no caller ever holds the pointer or the obligation. The buffer cannot be allocated once and reused; it is not the caller's to allocate.
 
@@ -402,15 +418,19 @@ load  = total == 0 ? 0 : busy / total      as CPULoad { user, system }; nice cou
 - **Sum the deltas; never difference a sum.** The machine-wide figure is these same per-CPU deltas summed across CPUs and divided once. It is not a second kernel call, and not an average of per-CPU percentages.
 - **Zero elapsed ticks yield a zero load.**
 
+`TickDelta` is these rules as a type (§4.1): constructing one *is* the wrapping subtraction, adding two *is* the sum, and a `CPULoad` can be made from nothing else.
+
 *Rationale: B.5. Prior art: C.2, C.4.*
 
 ### 5.8 Scheduling
 
-`LoadMonitor` owns one `Task` that loops: sleep until a deadline on a monotonic clock, sample, advance the deadline by the period. If the new deadline is already past, it is reset to *now + period*, so missed deadlines collapse into one sample. Changing the period cancels the task and starts a new one, which is the whole of "takes effect immediately".
+`LoadMonitor` owns one `Task` that loops: sleep until a deadline on a monotonic clock, sample, advance the deadline by the period. If the new deadline is already past, it is reset to *now + period*, so missed deadlines collapse into one sample. Changing the period cancels the task and starts a new one, which is the whole of "takes effect immediately". The deadline rule is the pure function `nextDeadline` (§4.1), and the sleep is the injected one (§4.2), so the loop itself has no branches.
 
 The sample runs on the main actor. It moves off the main actor only if measurement says it should (§7, P7).
 
-*Rationale: B.9.*
+**Diagnostics.** The app writes three kinds of debug-level message with `os.Logger`, under its bundle identifier as the subsystem: one at launch, with the processor's name and the CPU count; one per sample, with numeric fields only — the sample's index, how late it was, how long it took, the CPU count, and the machine-wide user, system, and idle tick deltas; and one whenever the step count changes. They are ordinary diagnostics, present in every build; debug-level messages are not persisted and cost almost nothing when no one is listening. They are how the cadence, the cost, and the agreement with `top` are observed from a shell (§7).
+
+*Rationale: B.9, B.17 (the diagnostics).*
 
 ### 5.9 The period control
 
@@ -433,6 +453,8 @@ Four `UserDefaults` keys, through `@AppStorage`:
 | `mainWindowWidth` | `Double?` | absent | with its partner; both present, or the first-launch size is used |
 | `mainWindowHeight` | `Double?` | absent | as above |
 
+All four are read and written by the `App` and the settings view. The monitor and the core touch no defaults (§4.2).
+
 `SettingsView` is a `Form` with one `Toggle`. Neither the load history nor the window's position is persisted.
 
 ### 5.11 Colors
@@ -451,26 +473,32 @@ When `readProcessorTicks()` throws, the monitor records the error, leaves its st
 
 ## 6. Testing
 
-swift-testing, with `@testable import CPULoadMeter`, hosted in the app. A test run launches the app, so a window and the menu bar symbol appear for its duration; and the tests run inside the sandbox.
+swift-testing, with `@testable import CPULoadMeter`, hosted in the app. A test run launches the app, so a window and the menu bar symbol appear for its duration; the tests run inside the app's process, in its sandbox container, and share its real defaults. Tests run in the Debug configuration only.
+
+**A test run is not the shipping sandbox.** The `test` action re-signs the Debug app with extra entitlements — `get-task-allow`, a read-only file exception for `/`, and Mach lookups for the test daemons — and a hosted run leaves the test bundle and the XCTest frameworks inside the app. Neither exception covers a host-port call or a sysctl read, so the reader tests below still mean what they say; but the clean proof that the sandbox permits the kernel calls, and every check made by hand, uses a product of the plain `build` action — the Release build.
 
 **The pure core** carries the valuable cases:
 
 - **Delta math:** ordinary deltas; zero elapsed ticks; and counter wrap — a previous counter near `UInt32.max` and a current one just past zero must yield a small positive delta.
 - **The machine-wide figure** equals the per-CPU deltas summed and divided once, not the mean of per-CPU percentages. The two differ whenever CPUs accrue unequal tick totals.
 - **`CPULoad`** stays within its bounds.
+- **`UsagePercentages`** always sums to 100 with no negative figure, including user 0.5% with system 99.5%, where rounding each independently would not.
+- **`nextDeadline`:** the ordinary advance, and the collapse of missed deadlines.
 - **`LoadHistory`:** fixed length under append; zero-fill at the *oldest* end on growth; oldest-first loss on shrink; identity on a same-size resize; a zero step count.
 - **`SamplingPeriod`:** the boundaries 0, 1, 60, and 61, and unparseable text.
 - **`MonitorState.advanced`:** first sample, steady state, and a change in the CPU count.
 
-**The monitor**, driven through its injected reader with scripted ticks: a failed read keeps the last good sample; a changed CPU count resets the baseline; a new period restarts the loop.
+**The monitor**, driven through its injected reader and sleep: a failed read keeps the last good sample; a changed CPU count resets the baseline; a new period restarts the loop, which is asserted on the next deadline the monitor asks to sleep until. No test waits on a real clock.
+
+**Hosting.** One test asserts that the tests are where they are supposed to be: inside the app's process, and inside its sandbox container.
 
 **The two readers** get one smoke test each — at least one CPU comes back; a non-empty name comes back — and no more. Because the tests are hosted in the sandboxed app, these re-prove on every run that the sandbox permits the calls.
 
-**One test stands in for an invariant the compiler cannot check.** "Every reply buffer is freed" is not expressible in the type system, so a runtime check guards it and says so: the test calls `readProcessorTicks()` a few thousand times and requires the physical footprint (`task_info`, `TASK_VM_INFO`) to grow by less than a small bound.
+**One test stands in for an invariant the compiler cannot check.** "Every reply buffer is freed" is not expressible in the type system, so a runtime check guards it and says so: the test calls `readProcessorTicks()` a few thousand times and requires the physical footprint (`task_info`, `TASK_VM_INFO`) to grow by less than a bound well under what the leak would cost. The bound is wide, because the host process is busy; the test is proved able to fail by removing the `vm_deallocate` once.
 
-Drawing is verified by eye (§7, P4). When validating against `top` by eye, note that `top` prints 76.06% as `76.6%`.
+**The drawing** is tested on its pixels. `ImageRenderer` renders a `LoadView` at a fixed size, at scales 1 and 2, and the tests compare the alpha of every pixel against the pattern §5.5 predicts: which pixels each step's line covers, that a zero load draws nothing, that the newest load is anchored to the right edge, and what a 0.5 pt line does at each scale. The reference alpha is measured from a full-height line rather than assumed. What these cannot see is where the canvas sits in the real window, which stays a check by eye (§7, P4). When validating against `top` by eye, note that `top` prints 76.06% as `76.6%`.
 
-*Rationale: B.10, B.16. Prior art: C.2. Seed code: D.4.*
+*Rationale: B.10, B.16, B.17. Prior art: C.2. Seed code: D.4.*
 
 ## 7. Bring-up verification
 
@@ -478,17 +506,17 @@ The design leans on some platform behavior that is recalled or documented but no
 
 | # | Check | Affects |
 |---|---|---|
-| **P2** | `host_processor_info`, the `sysctlbyname` read, and the menu bar extra all work inside the App Sandbox with the hardened runtime. If something is blocked: identify the denied operation from the sandbox's violation report, track down the entitlement for it, and then discuss. Turning the sandbox off is not the default fallback. | §2.1, §5.6 |
-| **P3** | The launch checkbox and the remembered size: `@AppStorage` works as the source of the launch behavior; `defaultSize` is honored at every launch when no frame is saved; a saved size round-trips without the window creeping each launch; `@AppStorage` accepts an optional `Double`; and a real Dock click with the box unchecked does what §2.12 says. | §2.5, §2.12, §5.1 |
+| **P2** | `host_processor_info`, the `sysctlbyname` read, and the menu bar extra all work inside the App Sandbox with the hardened runtime — shown on the **Release** product, by its launch message reporting the name and the CPU count with no sandbox denials logged, since a test run widens the sandbox (§6). If something is blocked: identify the denied operation from the sandbox's violation report, track down the entitlement for it, and then discuss. Turning the sandbox off is not the default fallback. | §2.1, §5.6 |
+| **P3** | The launch checkbox and the remembered size: `@AppStorage` works as the source of the launch behavior; `defaultWindowPlacement` is honored at every launch when no frame is saved, and sizes the first launch from the content's ideal size; a saved size round-trips without the window creeping each launch; `@AppStorage` accepts an optional `Double`; and a real Dock click with the box unchecked does what §2.12 says. The fallback, if `defaultWindowPlacement` disappoints, is `defaultSize` with a constant for the header's height. | §2.5, §2.12, §5.1 |
 | **P1** | *Re-confirm with a real click:* closing the main window leaves the app running, and the Window menu lists and reopens the window. | §2.2, §2.3 |
-| **P12** | The hosted-test settings (`TEST_HOST`, `BUNDLE_LOADER`) work as given, and the core's value types compile as `nonisolated` under the app target's `MainActor` default. | §3, §4.1 |
+| **P12** | Tests hosted in the app run at all. The settings (`TEST_HOST`, `BUNDLE_LOADER`) are the known part; the open part is whether the **hardened runtime** lets Xcode inject the test bundle into a sandboxed host, which no sibling project does. If it does not, the recourse to discuss is a Debug-only build-setting exception that leaves the sandbox, the hardened runtime, and Release untouched. Also: the core's declarations compile as `nonisolated` under the app target's `MainActor` default. | §3, §4.1, §6 |
 | **P13** | `SettingsLink` works inside the extra's menu; the extra cannot be removed from the menu bar by the user; the traffic-light buttons remain under the hidden title bar, and the header sits clear of them; the About panel shows the icon, name, version, and copyright. | §2.3–§2.5, §5.2 |
 | **P9** | A window opened from the extra's menu comes forward while another app is active. | §2.4, §5.2 |
 | **P14** | `onGeometryChange` delivers the width `LoadStackView` needs; if not, a `GeometryReader` does. A history read in a parent's `body` and passed down redraws the `LoadView` when it changes. | §4.2, §5.5 |
 | **P4** | Strokes are crisp at 1× and 2× — the canvas's origin sits on a pixel boundary; a zero load draws nothing; unrounded heights do not leave soft top edges. Choose the final `lineWidth` here. | §2.8, §5.5 |
 | **P5** | The period control commits on Return and on focus loss, rejects and reverts, and takes presets, as specified. | §2.11, §5.9 |
-| **P6** | Sampling continues during live resize and menu tracking. Observe the cadence with the window closed and only the extra showing. | §2.2, §5.8 |
-| **P7** | Redraw and sampling cost at full display width, measured with Instruments. Decide whether sampling stays on the main actor. | §5.5, §5.8 |
+| **P6** | Sampling continues during live resize and menu tracking. Observe the cadence with the window closed and only the extra showing. Read from the per-sample log message (§5.8): intervals that match the period, and no gap beyond one and a half periods. | §2.2, §5.8 |
+| **P7** | Redraw and sampling cost at full display width: the per-sample duration from the log, and the app's own CPU share from `top`, with the stored window width preset to the display's. Instruments where it helps. Decide whether sampling stays on the main actor. | §5.5, §5.8 |
 | **P8** | *Re-confirmed by the regression test:* no leak from the kernel's reply buffer. | §5.6, §6 |
 | **P10** | *With the later iteration, not version 1:* whether a `MenuBarExtra`'s label can host a live `Canvas`. The fallbacks are rendering the graph to an `Image` on each sample, or an `NSStatusItem`. | §8 |
 | **P11** | *Re-confirm in the real app:* the machine-wide figure agrees with `top` running alongside, idle and under a known load. Do not expect agreement with `ps`, or with `top`'s per-process column; they measure something else. | §2.9 |
@@ -557,10 +585,9 @@ These were offered as defaults marked *(proposed)*, to be vetoed, and were not. 
 | The default menus are left untouched. | §2.3 |
 | The header shows whole percentages. | §2.6 |
 | A typed period commits on Return or on loss of focus; there is no beep. | §2.11 |
-| `LoadMonitor`'s tick reader is passed in. This was marked *(proposed)* when the specification was declared decided. It is folded in because the style guide's Testability section — "pass collaborators in rather than reaching out for them" — asks for it, and because it costs one line. Whether the monitor's clock is injectable too is left to be weighed when the monitor is written. | §4.2, §6 |
+| `LoadMonitor`'s tick reader is passed in. This was marked *(proposed)* when the specification was declared decided. It is folded in because the style guide's Testability section — "pass collaborators in rather than reaching out for them" — asks for it, and because it costs one line. | §4.2, §6 |
 | The buffer-leak regression test. | §6 |
-| **Added while writing this clean version, and not previously discussed:** before the first load is available the header's second line reads `CPU usage: —`. The earlier drafts specified the failure text but not this initial state. | §2.6 |
-| **Also added while writing this version:** how the header's whole percentages come to sum to 100 — user and system are rounded to the nearest whole percent, and idle is the remainder. The earlier drafts required the sum but not the method. | §5.4 |
+| **Added while writing the clean version, and not previously discussed:** before the first load is available the header's second line reads `CPU usage: —`. The earlier drafts specified the failure text but not this initial state. | §2.6 |
 
 ### A.3 How the document got here
 
@@ -571,6 +598,25 @@ These were offered as defaults marked *(proposed)*, to be vetoed, and were not. 
 - **Draft 3** (2026-09-18). D7, D8, D10, D12, D13, D14, D16, and D18 decided, together with the rule for invalid period input.
 - **D11** (2026-09-21). Two targets and `@testable`; no framework. The discussion produced two new sections of the style guide, *Proportionality* and *Testability*.
 - **The clean specification** (2026-09-21). The specification restated cleanly, with the reasoning moved to these appendices, and brought into the repository as `Design.md`. The earlier drafts were working files and are not kept.
+- **Implementation planning** (2026-09-21). Planning the build found two errors in the clean version, settled the question it had left open about the monitor's clock, and added the means of verifying the app without watching it. The changes are listed in A.4.
+
+### A.4 What planning the implementation changed
+
+Planning the build (2026-09-21) surfaced these. They were put to you as a list with the implementation plan and approved with it. None reopens a decision in A.1. The reasoning is in B.17.
+
+| Change | Kind | Specified in |
+|---|---|---|
+| The header's percentages round cumulatively — busy, then user, system as the difference, idle as the remainder. | **Correction of my own error.** The rule I added while writing the clean version (round user and system; idle is the remainder) could yield idle = −1. | §4.1, §5.4 |
+| `TickDelta`: the wrap-safe difference between two samples, summable; `CPULoad` is built from one. | Correction. §4.1 said `CPULoad`'s only initializer took two `CPUTicks`, which cannot produce the machine-wide figure from summed deltas. | §4.1, §5.7 |
+| `LoadMonitor`'s sleep is passed in beside its reader; the deadline rule is a pure function; the monitor persists nothing. | The question the clean version left "to be weighed when the monitor is written", weighed. | §4.1, §4.2, §5.8, §5.10 |
+| Three debug-level log messages: at launch, per sample, and on a step-count change. | Addition. | §5.8, §7 |
+| The first-launch window size comes from the content's ideal size, through `defaultWindowPlacement`, rather than from a constant through `defaultSize`. | Change of mechanism; the behavior in §2.5 is unchanged. | §5.1, §7 (P3) |
+| A launch with no window starts from the step count of the stored window width. | Refinement of §2.10, which covered only "no window has ever been open". | §2.10 |
+| `LoadView`'s line width is an initializer parameter with a default. | Refinement. | §5.5 |
+| A change in the CPU count replaces the histories with zeros. | Detail the clean version left unsaid. | §4.1 |
+| The host port is obtained once. | Detail. | §5.6 |
+| A test run is not the shipping sandbox; P2's proof and every check by hand use the Release build. | Finding. | §6, §7 (P2, P12) |
+| The drawing is tested on its pixels. | Addition to the testing approach; §6 had said only "verified by eye". | §6 |
 
 ## Appendix B — Rationale
 
@@ -776,10 +822,43 @@ Draft 2 re-baselined after a failed read, discarding the previous sample. `top` 
 
 The style guide's *Testability* section makes testing a use case every intentional API must be designed for, informal APIs included.
 
-- **`LoadMonitor`'s reader is passed in.** The monitor was the one piece of the design that reached out for a collaborator instead of being handed it: it called `readProcessorTicks()` directly. Passing the reader in costs a line, and lets the monitor's own behavior be exercised with scripted ticks. Whether its clock should be injectable too is a closer call, left for when the monitor is written; that is *Proportionality*'s territory, and the costs there are real.
+- **`LoadMonitor`'s reader is passed in.** The monitor was the one piece of the design that reached out for a collaborator instead of being handed it: it called `readProcessorTicks()` directly. Passing the reader in costs a line, and lets the monitor's own behavior be exercised with scripted ticks. Whether its clock should be injectable too was left open here, as *Proportionality*'s territory; it was weighed when the implementation was planned, and the answer is in B.17.
 - **There is no public-surface test file** of the kind Utilities keeps (`IDFactoryAPITests`), because there is no public surface (B.10).
 - **Two test cases come straight from reading `top`:** counter wrap, the case `top`'s widen-then-subtract gets wrong; and the machine-wide figure as deltas summed and divided once (C.2).
 - **One test stands in for an invariant the compiler cannot check.** "Every reply buffer is freed" is not expressible in the type system — the pointer comes from C, and the obligation is a convention — so, per the *Compile-Time Enforcement* stance, a runtime check is the fallback and says which invariant it guards. The probe shows the two outcomes are unmistakable: zero growth when freeing, 16 KB per call when not (C.8). What the design *can* enforce structurally it does: the free is a `defer` inside the one function that makes the call, and that function returns a Swift array.
+
+### B.17 What planning the implementation found
+
+Planning the build (2026-09-21) surveyed how the sibling projects are written and run, and had a planning agent pressure-test the draft plan against this specification, the SourceTools specimen, Apple's documentation, and the open-source basis of Xcode's build system. Much of what follows was read by that agent rather than by me, and is labelled **[A]** where so; the two claims with the largest consequences I checked myself. The changes are listed in A.4.
+
+**The rounding error was mine.** Writing the clean version, I gave the header's percentages a rule — round user and system, and let idle be the remainder — that fails at the edge: user 0.5% and system 99.5% round to 1 and 100, leaving idle at −1. Cumulative rounding cannot: *busy* = round(user + system) is at most 100 and, since system is never negative, at least round(user); so system = busy − user and idle = 100 − busy are both non-negative, and the three sum to 100 by construction.
+
+**`TickDelta`.** The clean version said `CPULoad`'s only initializer took two `CPUTicks`, to make its bounds hold by construction. But the machine-wide figure is one division over deltas *summed across CPUs* (B.5), which that initializer cannot express. Putting the difference in a type of its own keeps both properties: the per-CPU initializer is the only place a counter is subtracted, so "subtract in 32 bits, then widen" cannot be got wrong elsewhere; deltas add; and a `CPULoad` still cannot be made from anything that could break its bounds.
+
+**The monitor's sleep is injected, and a clock is not.** The three behaviors §6 asks the monitor's tests to cover include "a new period restarts the loop", and periods are whole seconds, so a test on the real clock waits at least a second and is only probably right. The alternatives, weighed as *Proportionality* asks:
+
+- *A generic `Clock` parameter.* It makes `LoadMonitor` a generic class, which complicates `@Observable` and the environment, and needs a manual test clock of some sixty lines.
+- *Exposing the per-sample step to the tests.* A door opened for the test, which *Testability* rules out.
+- *An injected stream of ticks.* It departs from §5.8's single loop.
+- *An injected sleep.* One parameter, parallel to the injected reader. The class stays non-generic and the per-sample step stays private. A test hands the monitor a sleep it controls and asserts on the next deadline the monitor asks to sleep until — deterministic, because everything runs on the main actor.
+
+The last is cheap and buys the most, so it is the design. The deadline rule moves into the core as a pure function for the same reason: the branch in the loop becomes a function a test can call.
+
+**The monitor persists nothing.** Hosted tests run inside the app's process, so `UserDefaults.standard` in a test *is* the app's real domain. A monitor that stored its own period could change your setting during a test run; one that is handed its period cannot.
+
+**The log messages.** Several bring-up checks are about behavior I cannot watch: the cadence with no window open (P6), the cost (P7), agreement with `top` (P11), the step count arriving from the view (P14). A debug-level `os.Logger` message per sample makes all four observable from a shell with `log stream`, whose `--level`, `--predicate`, and `--timeout` options are present on this machine **[A]**. This is ordinary diagnostic output, not a branch that asks whether the app is under test, which the design refuses (B.10). The per-sample message carries numbers only, which the logging system does not redact.
+
+**The first-launch size.** §5.1 fed `defaultSize` a size computed ahead of layout, which needs the header's height before the header exists. `defaultWindowPlacement` (macOS 15+) hands the closure a proxy for the content, and Apple's own example sizes a window with `content.sizeThatFits(.unspecified)` **[D]**. The documentation adds that the returned placement *"acts as a default for when the window first appears"* and that *"During state restoration, the system restores the window to its most recent size and position, rather than the default placement."* **[D]** With restoration disabled (B.8) I expect the closure to govern every launch **[R]**, which is P3.
+
+**A test run is not the shipping sandbox.** After `xcodebuild test`, SourceTools' Debug app carries `get-task-allow`, `temporary-exception.files.absolute-path.read-only` for `/`, and `temporary-exception.mach-lookup.global-name` for three test daemons **[O]**. The build system adds these under the `test` and `profile` scheme commands, builds a hosted test bundle into the host's `Contents/PlugIns`, and copies the XCTest and Testing frameworks into the host's `Contents/Frameworks` **[A]** (`swiftlang/swift-build`: `ProductTypes.swift`, `ProductPlan.swift`, `XCTestHostTaskProducer`; the shipped Xcode may differ). Neither exception bears on a host-port call or a sysctl read, so the hosted reader tests still show what they claim; but a sandbox with a read exception for the whole filesystem is not the one that ships, so the clean proof of P2 and every check by hand use the Release build.
+
+**Hosted tests under the hardened runtime are the open question.** Xcode's own SwiftUI app template is sandboxed and hosts its unit tests in the app, so sandbox-plus-hosted is well travelled; but that template does not turn the hardened runtime on **[A]**. Xcode injects the test bundle through `DYLD_INSERT_LIBRARIES` **[A]**, and whether `get-task-allow` alone makes a hardened process honor that is not established. That is the real content of P12. If it fails, the recourse to discuss is a Debug-only `RUNTIME_EXCEPTION_ALLOW_DYLD_ENVIRONMENT_VARIABLES`, which touches neither the sandbox nor Release. A mismatched `TEST_HOST` path produces only a build-system warning, which does not fail a warnings-as-errors build **[A]**, so the first build's log is searched for it.
+
+**Pixel tests.** `ImageRenderer`'s documentation mentions drawing to a `Canvas` and exporting it **[D]**; Swift Testing can attach values to a test's results (Swift 6.2+) **[D]**; and `xcresulttool export attachments` exists in this Xcode **[O]**. The reference alpha is measured rather than assumed because the label color's alpha is not documented. Asymmetric loads catch a vertically flipped image, and a self-check on a plain stack keeps a flipped helper from cancelling a flipped view.
+
+**Isolation.** `nonisolated` on a struct, class, or enum declaration is SE-0449, implemented in Swift 6.1 **[D]**. `onGeometryChange`'s transform closure is `@Sendable` **[D]**, which is why `LoadView.stepLength` is `nonisolated`. The Tests target keeps the project's `nonisolated` default, so a core declaration that misses its annotation fails the test build — a compile-time guard, not a test.
+
+**The host port.** Each call to `mach_host_self()` adds a user reference to the task's name for the host port **[R]**; `top` stores the port and reuses it (`libtop_port`, used at `libtop.c:712`) **[S]**. The reader does likewise.
 
 ## Appendix C — Prior art: how `top`, `ps`, and the kernel answer these questions
 
@@ -1239,6 +1318,7 @@ Every factual claim in Appendices B, C, and D carries one of these labels, becau
 | **[S+O]** | Read in source *and* observed on this machine. |
 | **[R]** | Recalled from memory. Not verified. A hypothesis until a bring-up proof (§7) covers it. |
 | **[U]** | Undocumented Apple behavior. I do not know what it guarantees, and nothing in the design rests on it. |
+| **[A]** | Reported by a planning agent that read the named source or file on this machine. I did not re-read it. Weaker than **[S]** or **[O]** for that reason, and used only in B.17. |
 
 Conditions for every **[O]**: Mac with Apple M2 Ultra (24 CPUs), macOS 27.0, Xcode 27.0 (27A266a), Swift 6.4, `MacOSX27.0.sdk`, 2026-09-18, unsandboxed. The lifetime probes were additionally: built with `swiftc -parse-as-library` targeting macOS 26.0, wrapped in minimal `.app` bundles, ad-hoc signed, launched as direct children of a shell with `-ApplePersistenceIgnoreState YES`, and self-driving (no human input).
 
@@ -1275,3 +1355,12 @@ Conditions for every **[O]**: Mac with Apple M2 Ultra (24 CPUs), macOS 27.0, Xco
 | About panel copyright fallback | Apple, `NSApplication.orderFrontStandardAboutPanel(options:)`. The page fetched did not list the other fields' sources. |
 | No SwiftUI combo box | `grep -ci combobox` over the SDK's `SwiftUI.swiftinterface` → 0; control grep for `public struct Picker<` → 2. |
 | Shared project xcconfigs | `shasum`: Utilities' and SourceTools' `Project-{Common,Debug,Release}.xcconfig` match pairwise; HelloWorld's `Project-Common` differs. |
+| The specimen is sound under the current toolchain | 2026-09-21: `xcodebuild` Debug build and test of SourceTools under Xcode 27.0 — build succeeded with 15 of 23 object files recompiled in that run; 65 tests in 7 suites passed; the app was signed with an Apple Development identity, sandboxed, with the runtime flag. |
+| A test run widens the Debug app's entitlements | `codesign -d --entitlements` on SourceTools' Debug app after that `xcodebuild test`: `get-task-allow`; `temporary-exception.files.absolute-path.read-only` = `/`; `temporary-exception.mach-lookup.global-name` = `com.apple.testmanagerd`, `com.apple.dt.testmanagerd.runner`, `com.apple.coresymbolicationd`. I did not list the app's full entitlements before that test run — only counted the sandbox key — so that it is the `test` action which adds them rests on the build system's source (next row), not on a before-and-after observation of mine. SourceTools' tests are not hosted, so nothing was copied into its bundle. |
+| How the build system hosts a test bundle; the template's settings; the warning on a `TEST_HOST` mismatch | **[A]** `swiftlang/swift-build` (`ProductTypes.swift`, `ProductPlan.swift`, `XCTestHostTaskProducer`), and Xcode 27's project templates and build-setting specifications on this machine. The open-source build system is the basis of Xcode's, and the shipped copy may differ. |
+| `defaultWindowPlacement` | Apple, `Scene.defaultWindowPlacement(_:)`: macOS 15.0+; the example sizing a window with `content.sizeThatFits(.unspecified)`; the sentences on first appearance and on state restoration. |
+| `ImageRenderer` exports a `Canvas`; `onGeometryChange` | Apple, `ImageRenderer` (macOS 13.0+; the overview's Canvas export) and `View.onGeometryChange(for:of:action:)` (macOS 13.0+; `T: Equatable & Sendable`; an `@Sendable` transform). |
+| `SettingsLink`; Swift Testing attachments | Apple, `SettingsLink` (macOS 14.0+; the page does not say where it may be used) and `Testing.Attachment` (Swift 6.2+, Xcode 26.0+). |
+| `nonisolated` on type declarations | Swift Evolution SE-0449, "Allow `nonisolated` to prevent global actor inference", implemented in Swift 6.1. It does not discuss the default-isolation build setting. |
+| Tools for the pixel tests and the cost check | `xcrun --find xcresulttool` and `xctrace` both resolve in Xcode 27.0; `xcresulttool export` lists an `attachments` subcommand; `xctrace list templates` includes Time Profiler and SwiftUI. |
+| The repository's merge settings | `gh api repos/coreaudio-fan/CPULoadMeter`: squash merges titled by the PR with the commit messages as the body; branches deleted on merge. Identical to SourceTools'. |
