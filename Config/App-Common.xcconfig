@@ -1,0 +1,38 @@
+//	Architectures
+SDKROOT = macosx
+SUPPORTED_PLATFORMS = macosx
+
+//	Deployment
+COMBINE_HIDPI_IMAGES = YES
+MACOSX_DEPLOYMENT_TARGET = 26.0
+
+//	Info.plist Values
+INFOPLIST_KEY_LSApplicationCategoryType = public.app-category.utilities
+INFOPLIST_KEY_NSHumanReadableCopyright = ©2026 by coreaudio-fan
+
+//	Linking - General
+LD_RUNPATH_SEARCH_PATHS = @executable_path/../Frameworks
+
+//	Localization
+STRING_CATALOG_GENERATE_SYMBOLS = YES
+SWIFT_EMIT_LOC_STRINGS = YES
+
+//	Packaging
+GENERATE_INFOPLIST_FILE = YES
+PRODUCT_BUNDLE_IDENTIFIER = coreaudio-fan.CPULoadMeter
+PRODUCT_NAME = CPULoadMeter
+
+//	Signing
+CODE_SIGN_ENTITLEMENTS = Config/App.entitlements
+ENABLE_HARDENED_RUNTIME = YES
+
+//	Documentation Compiler - Options
+//	Project-Common.xcconfig turns the documentation compiler on for every target. This project publishes no
+//	API -- it has no framework -- so there is nothing for it to enforce, and both targets opt out.
+RUN_DOCUMENTATION_COMPILER = NO
+
+//	Swift Compiler - Concurrency
+//	The app target defaults to MainActor isolation, mirroring Apple's app template; the project-wide
+//	baseline in Project-Common.xcconfig stays nonisolated for the Tests target. The pure core lives in
+//	this target too, so every top-level declaration in App/Core is marked nonisolated in source.
+SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor

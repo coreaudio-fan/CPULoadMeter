@@ -1,0 +1,26 @@
+#include "Project-Common.xcconfig"
+
+//	Architectures
+ONLY_ACTIVE_ARCH = NO
+
+//	Build Options
+DEBUG_INFORMATION_FORMAT = dwarf-with-dsym
+ENABLE_TESTABILITY = NO
+
+//	Deployment
+COPY_PHASE_STRIP = YES
+STRIP_INSTALLED_PRODUCT = YES
+
+//	Apple Clang - Code Generation
+GCC_OPTIMIZATION_LEVEL = s
+
+//	Apple Clang - Preprocessing
+ENABLE_NS_ASSERTIONS = NO
+GCC_PREPROCESSOR_DEFINITIONS = $(inherited)
+
+//	Swift Compiler - Code Generation
+SWIFT_COMPILATION_MODE = wholemodule
+SWIFT_OPTIMIZATION_LEVEL = -O
+
+//	Swift Compiler - Custom Flags
+SWIFT_ACTIVE_COMPILATION_CONDITIONS = $(inherited)
