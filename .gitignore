@@ -1,0 +1,10 @@
+.DS_Store
+DerivedData/
+
+# Xcode per-user state
+xcuserdata/
+*.xcuserstate
+*.xcscmblueprint
+*.xccheckout
+*.moved-aside
+project.xcworkspace/
