@@ -5,7 +5,7 @@ import Foundation
 ///	The read is `machdep.cpu.brand_string`, in two calls: one for the length, one for the bytes. It returns `nil` if
 ///	either fails, which no supported Mac is known to do; the option is there so that the header can still be drawn
 ///	without a name. Design.md, section 5.6.
-nonisolated func readProcessorName() -> String? {
+func readProcessorName() -> String? {
 	let key = "machdep.cpu.brand_string"
 	var length = 0
 	guard sysctlbyname(key, nil, &length, nil, 0) == 0, length > 0 else {

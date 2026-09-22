@@ -8,7 +8,7 @@ import os
 ///	They are how the cadence, the cost, and the agreement with `top` are observed without eyes, and they are present in
 ///	every build: a debug-level message is not persisted and costs almost nothing when no one is listening. Design.md,
 ///	section 5.8 and B.17.
-nonisolated enum Diagnostics {
+enum Diagnostics {
 
 	///	The one logger. The subsystem is the bundle identifier, as the spec requires.
 	private static let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "CPULoadMeter", category: "monitor")

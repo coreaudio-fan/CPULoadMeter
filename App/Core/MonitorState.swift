@@ -5,7 +5,7 @@
 ///	and clears the machine-wide load. The first sample is that same rule, going from no CPUs to N. Any other sample
 ///	yields one load per CPU, appended to its history, and the machine-wide load from the deltas summed and divided once.
 ///	Design.md, sections 2.9, 2.10, 4.1, and 5.7.
-nonisolated struct MonitorState: Sendable, Equatable {
+struct MonitorState: Sendable, Equatable {
 
 	///	The ticks of the last sample, one per CPU in CPU ID order; empty before the first.
 	let previousTicks: [CPUTicks]

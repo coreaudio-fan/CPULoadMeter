@@ -4,7 +4,7 @@
 ///	widened, so a counter that wrapped between the samples yields a small positive delta like any other. Nice ticks are
 ///	folded into user. Deltas add in 64 bits, which is how the machine-wide figure is formed: the per-CPU deltas summed,
 ///	never a difference of sums. Design.md, sections 4.1 and 5.7.
-nonisolated struct TickDelta: Sendable, Equatable {
+struct TickDelta: Sendable, Equatable {
 
 	///	No ticks at all; the identity for summing.
 	static let zero = TickDelta(user: 0, system: 0, idle: 0)

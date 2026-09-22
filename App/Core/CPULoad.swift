@@ -3,7 +3,7 @@
 ///
 ///	Each fraction is in 0…1 and their sum is at most 1, by construction: apart from `zero`, the only way to make one is
 ///	from a `TickDelta`, whose busy ticks never exceed its total. Design.md, sections 2.9, 4.1, and 5.7.
-nonisolated struct CPULoad: Sendable, Equatable {
+struct CPULoad: Sendable, Equatable {
 
 	///	No load: the history's initial value, and the load over an interval in which no ticks elapsed.
 	static let zero = CPULoad(user: 0, system: 0)

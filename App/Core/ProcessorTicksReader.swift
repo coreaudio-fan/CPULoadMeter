@@ -2,7 +2,7 @@ import Foundation
 
 ///	The host port, obtained once. Every `mach_host_self()` call hands back a fresh send right that the caller is
 ///	expected to release, so asking on every sample would leak port rights; libtop asks once, and so does this.
-nonisolated private let hostPort = mach_host_self()
+private let hostPort = mach_host_self()
 
 ///	Reads every CPU's cumulative tick counters from the kernel, in CPU ID order.
 ///
@@ -11,7 +11,7 @@ nonisolated private let hostPort = mach_host_self()
 ///	unconditionally, before the function returns, and what it returns is a Swift array: no pointer, and no obligation,
 ///	escapes. The buffer cannot be allocated once and reused, because it is not the caller's to allocate. Design.md,
 ///	section 5.6 and B.12.
-nonisolated func readProcessorTicks() throws(MachError) -> [CPUTicks] {
+func readProcessorTicks() throws(MachError) -> [CPUTicks] {
 	var cpuCount: natural_t = 0
 	var reply: processor_info_array_t? = nil
 	var replyCount: mach_msg_type_number_t = 0
@@ -27,7 +27,7 @@ nonisolated func readProcessorTicks() throws(MachError) -> [CPUTicks] {
 	}
 }
 
-nonisolated private extension CPUTicks {
+private extension CPUTicks {
 
 	///	The kernel's tuple, given names. The order is the kernel's: user, system, idle, nice.
 	init(_ load: processor_cpu_load_info) {

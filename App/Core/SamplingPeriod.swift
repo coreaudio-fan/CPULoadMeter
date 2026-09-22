@@ -4,7 +4,7 @@ import Foundation
 ///
 ///	The only ways to make one are the two failable initializers, so an out-of-range period cannot be constructed; the
 ///	control's reject-and-revert rule is their `nil`. Design.md, sections 2.11 and 4.1.
-nonisolated struct SamplingPeriod: Sendable, Equatable {
+struct SamplingPeriod: Sendable, Equatable {
 
 	///	The periods the control offers as presets.
 	static let presets = [1, 2, 5, 10, 30].compactMap { SamplingPeriod(seconds: $0) }

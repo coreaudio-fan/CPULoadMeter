@@ -3,7 +3,7 @@
 ///	There is no partially full state. A new history is all zeros; appending drops the oldest load and adds the newest,
 ///	so the length cannot change; resizing prepends zeros to grow, so that the added steps are the oldest, and keeps the
 ///	newest loads to shrink. Every operation returns a new value. Design.md, sections 2.10 and 4.1.
-nonisolated struct LoadHistory: Sendable, Equatable {
+struct LoadHistory: Sendable, Equatable {
 
 	///	The loads, oldest first. The last is the newest, which the view draws at its right edge.
 	let loads: [CPULoad]

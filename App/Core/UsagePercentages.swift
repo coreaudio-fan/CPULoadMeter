@@ -3,7 +3,7 @@
 ///	The rounding is cumulative, which is what makes that hold: busy is user plus system rounded to the nearest whole
 ///	percent; user is user rounded; system is busy less user; idle is 100 less busy. Rounding user and system each on
 ///	their own could give 1 and 100 for 0.5% and 99.5%, and an idle of −1. Design.md, sections 4.1 and 5.4.
-nonisolated struct UsagePercentages: Sendable, Equatable {
+struct UsagePercentages: Sendable, Equatable {
 
 	///	The whole percent spent running user code.
 	let user: Int
