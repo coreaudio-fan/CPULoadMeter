@@ -24,10 +24,9 @@ struct CPULoadMeterApp: App {
 	///	The main window's last height, kept with its partner.
 	@AppStorage(DefaultsKey.mainWindowHeight) private var mainWindowHeight: Double?
 
-	///	The sampling period in whole seconds, as the user last chose it.
-	@AppStorage(DefaultsKey.samplingPeriodSeconds) private var samplingPeriodSeconds = SamplingPeriod.default.seconds
-
-	///	The sampler, owned here so that its lifetime is the process's, not a window's.
+	///	The sampler, owned here so that its lifetime is the process's, not a window's. Nothing in this body reads its
+	///	state: a scene body that observed it would be re-evaluated on every sample, and the menus rebuilt with it
+	///	(`MainWindowContent`).
 	@State private var monitor: LoadMonitor
 
 	///	The processor's name, read once at launch; `nil` if the kernel would not say.
@@ -58,7 +57,7 @@ struct CPULoadMeterApp: App {
 	var body: some Scene {
 		//	The title is what the Window menu shows. The window itself displays none.
 		Window("CPULoadMeter", id: Self.mainWindowID) {
-			MainView(processorName: processorName, cpuCount: monitor.state.histories.count, machineLoad: monitor.state.machineLoad, histories: monitor.state.histories, reportStepCount: monitor.setStepCount)
+			MainWindowContent(processorName: processorName, monitor: monitor)
 
 				//	Fills the window, so that what is measured below is the window's content, not the view's own size.
 				.frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -74,11 +73,6 @@ struct CPULoadMeterApp: App {
 				} action: { size in
 					mainWindowWidth = size.width
 					mainWindowHeight = size.height
-				}
-
-				//	The monitor persists nothing; the app stores the period again whenever the monitor's changes.
-				.onChange(of: monitor.period) {
-					samplingPeriodSeconds = monitor.period.seconds
 				}
 		}
 		.windowStyle(.hiddenTitleBar)
