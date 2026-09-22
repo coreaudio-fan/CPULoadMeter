@@ -42,7 +42,7 @@ Inside `App/`, the code is layered as Design.md §3 and §4 describe:
   - `CPUTicks` names the kernel's four cumulative counters. They are 32-bit and wrap; nothing compares them except by wrapping subtraction.
   - `readProcessorTicks()` calls `host_processor_info` and returns `[CPUTicks]` with the failure in its signature, `throws(MachError)`. The kernel allocates the reply in this task on every call and nothing frees it but the caller, so the `vm_deallocate` is a `defer` in that one function and no pointer escapes. The host port is obtained once, in a file-scope `let`, as libtop does.
   - `readProcessorName()` reads `machdep.cpu.brand_string` with `sysctlbyname`.
-- `App/Views/` holds the SwiftUI views. `MainView` is a placeholder until the header and the graphs land.
+- `App/Views/` holds the SwiftUI views. `MainView` is a placeholder until the header and the graphs land. `MenuBarExtraMenu` holds **the app's one AppKit call**, `NSApplication.shared.activate()` after `openWindow`: SwiftUI's environment has no action that activates an app, and without it *Show CPULoadMeter* did not bring the app to the foreground when another app was frontmost (Design.md D19, D.6). The design is otherwise pure SwiftUI — no app delegate, no `NSViewRepresentable` — and any further AppKit call needs the same kind of decision, recorded in the spec.
 - `App/CPULoadMeterApp.swift` declares the scenes. Their order is load-bearing: `Window` first, `Settings`, `MenuBarExtra` last, and the extra always inserted, because the extra's presence is what lets the app outlive its window and gives the window its Window-menu entry (Design.md B.1, D.2).
 - `App/Diagnostics.swift` is the `os.Logger`, subsystem `coreaudio-fan.CPULoadMeter`, category `monitor`. Its messages are debug level and present in every build; read them with `/usr/bin/log stream --debug --predicate 'subsystem == "coreaudio-fan.CPULoadMeter"'`.
 - `App/DefaultsKey.swift` names the `UserDefaults` keys. The app and its views read and write defaults; the core and the readers touch none.
@@ -108,6 +108,13 @@ The open question at bring-up was whether the hardened runtime would let Xcode i
 ### Sandbox denials that are not this app's (2026-09-21)
 
 With the log streaming during a Release launch, the kernel reports `deny(1) system-info vfs.disk-space` many times and `deny(1) iokit-open-user-client AppleNVMeEANUC` once. Neither reader provokes them: SourceTools' sandboxed app, which makes no kernel reads, logs both at launch too. What those two operations are for is not documented, and nothing here is decided on them. The launch line — `Launched on Apple M2 Ultra with 24 CPUs` — is written from inside the shipping sandbox, which is the proof that both reads are permitted.
+
+### The first hand checks (2026-09-21)
+
+On the Release build: closing the window leaves the app running and Window ▸ CPULoadMeter reopens it (P1); the launch checkbox, the remembered size, and a Dock click with the box unchecked behave as specified (P3); `SettingsLink` works from the extra, the traffic lights are present, and About is right (P13). Two things did not hold, and the spec records both as decisions (Design.md A.1, D19 and D20; results in D.6):
+
+- ***Show CPULoadMeter* did not bring the app to the foreground** with another app frontmost. SwiftUI has no activation action; one AppKit call was admitted (see `MenuBarExtraMenu` above). `NSApplication.activate()` is documented as a request the system may decline, so the fix awaits its own re-check.
+- **The menu bar extra can be command-dragged out of the menu bar, and with the window closed that quits the app.** Both are documented: Apple's `MenuBarExtra` overview says an app that only shows in the menu bar is terminated when the user removes the extra. SwiftUI offers no way to forbid the removal, only the `isInserted` binding. Accepted as is; do not "fix" it without reopening D20.
 
 ### The menu bar extra, seen from inside (2026-09-21)
 
