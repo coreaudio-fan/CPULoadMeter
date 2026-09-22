@@ -19,8 +19,7 @@ struct HostingTests {
 		#expect(NSHomeDirectory().hasSuffix("/Library/Containers/coreaudio-fan.CPULoadMeter/Data"))
 	}
 
-	//	The app target defaults to MainActor isolation and this target does not, so a test that touches the app's
-	//	declarations says where it runs.
+	//	CPULoadMeterApp is main-actor-isolated through SwiftUI's App protocol, so a test that touches it says so.
 	@Test @MainActor func appsInternalDeclarationsAreReachable() async throws {
 		#expect(CPULoadMeterApp.mainWindowID == "main")
 	}

@@ -38,10 +38,11 @@ There is no framework, on purpose: Design.md B.10 records the decision, and Test
 
 Inside `App/`, the code is layered as Design.md §3 and §4 describe:
 
-- `App/Core/` is the pure core plus the two kernel readers. Everything at top level here is marked `nonisolated`, because the App target defaults to `MainActor` isolation and the Tests target does not: a missed annotation fails the *test* build with "main actor-isolated global function … cannot be called from outside of the actor", which is the compile-time guard (observed 2026-09-21).
+- `App/Core/` is the pure core plus the two kernel readers. Nothing here carries an isolation annotation, and nothing needs one: the App target uses the project's default isolation, `nonisolated` (Design.md D21), and these are `Sendable` values and pure functions with no actor to belong to. Isolation is declared where it exists — the views and `CPULoadMeterApp` are main-actor through SwiftUI's `View` and `App` protocols, and the monitor will declare `@MainActor` — never assumed for a whole target and opted out of.
   - `CPUTicks` names the kernel's four cumulative counters. They are 32-bit and wrap; nothing compares them except by wrapping subtraction.
   - `readProcessorTicks()` calls `host_processor_info` and returns `[CPUTicks]` with the failure in its signature, `throws(MachError)`. The kernel allocates the reply in this task on every call and nothing frees it but the caller, so the `vm_deallocate` is a `defer` in that one function and no pointer escapes. The host port is obtained once, in a file-scope `let`, as libtop does.
   - `readProcessorName()` reads `machdep.cpu.brand_string` with `sysctlbyname`.
+  - The value types of Design.md §4.1, each holding its invariant by construction and every operation returning a new value: `TickDelta` (the only place a counter is subtracted — in 32 bits with wrapping arithmetic, then widened; deltas add), `CPULoad` (made only from a `TickDelta`, or `zero`), `UsagePercentages` (cumulative rounding, always summing to 100), `LoadHistory` (always exactly `stepCount` loads, oldest first), `SamplingPeriod` (1…60 through failable initializers only), and `MonitorState` (`advanced(with:)` is the entire per-sample logic; a CPU-count change, the first sample included, is a baseline only). Nothing in the app uses them until the monitor lands; the test bundle reaches them through the app's debug dylib regardless.
 - `App/Views/` holds the SwiftUI views. `MainView` is a placeholder until the header and the graphs land. `MenuBarExtraMenu`'s *Show CPULoadMeter* calls `openWindow` and nothing else: with another app active it does **not** bring the app to the foreground, a known limitation of version 1 that Design.md D19 and §8 record and defer. The design is pure SwiftUI — no `import AppKit`, no app delegate, no `NSViewRepresentable` — and any AppKit call needs a decision recorded in the spec; see the Findings below for the two that were tried here and rolled back.
 - `App/CPULoadMeterApp.swift` declares the scenes. Their order is load-bearing: `Window` first, `Settings`, `MenuBarExtra` last, and the extra always inserted, because the extra's presence is what lets the app outlive its window and gives the window its Window-menu entry (Design.md B.1, D.2).
 - `App/Diagnostics.swift` is the `os.Logger`, subsystem `coreaudio-fan.CPULoadMeter`, category `monitor`. Its messages are debug level and present in every build; read them with `/usr/bin/log stream --debug --predicate 'subsystem == "coreaudio-fan.CPULoadMeter"'`.
@@ -72,28 +73,28 @@ All build settings live in `.xcconfig` files; every `buildSettings` dict in `pro
 | File | Scope |
 |---|---|
 | `Project-{Common,Debug,Release}.xcconfig` | Byte-identical copies of SourceTools' and Utilities' — language standards, warning and analyzer allowlists, Swift language mode and concurrency, signing, and the optimization/testability split |
-| `App-*.xcconfig` | App target: platform, packaging, runpath, entitlements, hardened runtime, `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` |
+| `App-*.xcconfig` | App target: platform, packaging, runpath, entitlements, hardened runtime; no isolation override |
 | `Tests-*.xcconfig` | Test bundle: platform, packaging, and the host — `TEST_HOST` and `BUNDLE_LOADER` |
 | `App.entitlements` | The sandbox alone |
 
 Deliberate divergences from the siblings' baseline, each on purpose:
 
 - `RUN_DOCUMENTATION_COMPILER = NO` on both targets. The project publishes no API — there is no framework — so there is nothing for the documentation compiler to enforce. HelloWorld takes the same position.
-- `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` in `App-Common.xcconfig` only, mirroring Apple's app template; the project baseline stays `nonisolated` for the Tests target, which is what makes the `nonisolated` annotations in `App/Core/` compiler-checked.
+- **No `SWIFT_DEFAULT_ACTOR_ISOLATION` override** in `App-Common.xcconfig`, where SourceTools' app sets `MainActor` "mirroring Apple's app template". The project baseline, `nonisolated`, applies to both targets. A `MainActor` default puts everything in one isolation domain so that a simple app need not think about synchronization, and its cost here was a `nonisolated` on every pure declaration to escape it (Design.md D21, 2026-09-22). Do not reintroduce it; declare `@MainActor` where mutable UI-facing state lives.
 - The Tests target sets `TEST_HOST` and `BUNDLE_LOADER`, which the siblings' test bundles do not. `TEST_HOST` must equal the app's `$(BUILT_PRODUCTS_DIR)/$(EXECUTABLE_PATH)` exactly; a mismatch is only a build-system warning ("Unable to find a target which creates the host product"), which a warnings-as-errors build does not fail on, so a changed product name has to be checked in the build log. The target sets no signing, runpath, or entitlement overrides: it inherits the project's team signing, which the host's library validation requires.
 
 ## Testing
 
-The suite uses **swift-testing** — `import Testing`, `struct` suites, `@Test` functions, `#expect`/`try #require`. 6 tests in 3 suites as of this writing.
+The suite uses **swift-testing** — `import Testing`, `struct` suites, `@Test` functions, `#expect`/`try #require`. 40 tests in 9 suites as of this writing.
 
 **`@testable import` is used here, where the sibling projects forbid it.** That is a decision, recorded in Design.md B.10 and reasoned from the style guide's *Testability* section: a test stands where the API's real clients stand. SourceTools' and Utilities' APIs are published from frameworks to real importers, so a plain import is their clients' position and `@testable` would hide access-control regressions. Nothing here is published: the app's own code, which sees `internal` declarations, is the only client there is, and `@testable import` gives a test exactly that view while `private` stays the enforced line. A framework target existing only so that a plain import could be written would be structure bought to satisfy a guideline whose reason does not arise (*Proportionality*).
 
 **The tests are hosted in the app.** `Tests/HostingTests.swift` asserts it: the tests run inside the app's process (`Bundle.main.bundleIdentifier`), inside its sandbox container (`NSHomeDirectory()`), and can reach the app's internal declarations. A control run with `TEST_HOST` and `BUNDLE_LOADER` removed fails the first two, reporting `com.apple.dt.xctest.tool` and the real home directory (2026-09-21), so the assertions can fail. Because every test runs in the sandboxed app, the readers' smoke tests re-prove on every run that the sandbox permits the kernel calls.
 
-**Two guards were proved able to fire** on 2026-09-21, in scratch copies:
+**Guards proved able to fire**, in scratch copies:
 
 - `readerFreesEveryReplyBuffer` stands in for an invariant the type system cannot express. It calls `readProcessorTicks()` 4,000 times and requires the physical footprint (`task_info`, `TASK_VM_INFO`) to grow by under 16 MB. With the `vm_deallocate` removed it failed with a growth of 65,830,960 bytes — one 16 KB page per call.
-- The `nonisolated` annotations in `App/Core/` are guarded by the build, not by a test: with `nonisolated` dropped from `readProcessorTicks()`, the test build failed at `Tests/ProcessorTicksReaderTests.swift:19`.
+- Under the App target's earlier `MainActor` default (2026-09-21), a `nonisolated` missing from a core declaration failed the *test* build (`Tests/ProcessorTicksReaderTests.swift:19`) and, once the core types referenced each other, the app build too. D21 removed that default and the annotations with it; there is nothing left to guard.
 
 **A test run is not the shipping sandbox.** The `test` action re-signs the Debug app with `get-task-allow`, a read-only file exception for `/`, and Mach lookups for `com.apple.testmanagerd`, `com.apple.dt.testmanagerd.runner`, and `com.apple.coresymbolicationd`, and it builds the test bundle into the app's `Contents/PlugIns`. None of that touches a host-port call or a sysctl read, so the hosted reader tests mean what they say; but the clean proof of the sandbox, and every check by hand, uses the Release product.
 

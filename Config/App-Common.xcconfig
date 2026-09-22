@@ -32,7 +32,6 @@ ENABLE_HARDENED_RUNTIME = YES
 RUN_DOCUMENTATION_COMPILER = NO
 
 //	Swift Compiler - Concurrency
-//	The app target defaults to MainActor isolation, mirroring Apple's app template; the project-wide baseline in
-//	Project-Common.xcconfig stays nonisolated for the Tests target. The pure core lives in this target too, so every
-//	top-level declaration in App/Core is marked nonisolated in source.
-SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor
+//	No override: the project's default isolation, nonisolated, applies here as in every target of every sibling.
+//	SourceTools' app sets MainActor instead, which puts the whole target in one isolation domain and cost this project a
+//	nonisolated on every pure declaration until it was removed. Isolation is declared where it exists. Design.md, D21.
