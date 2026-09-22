@@ -20,17 +20,26 @@ struct HeaderView: View {
 	///	The sampling period, for the control.
 	@Binding var period: SamplingPeriod
 
+	///	Whether the period field has focus. A click on the header's text clears it, which commits the field.
+	let isEditingPeriod: FocusState<Bool>.Binding
+
 	var body: some View {
 		VStack(alignment: .leading, spacing: 4) {
 			HStack {
 				//	Fixed sizes on both ends keep the window at least as wide as the header needs (section 2.5).
 				Text("\(processorName ?? "Unknown CPU") · \(cpuCount) cores")
 					.fixedSize()
+					.onTapGesture {
+						isEditingPeriod.wrappedValue = false
+					}
 				Spacer()
-				PeriodControl(period: $period)
+				PeriodControl(period: $period, isEditing: isEditingPeriod)
 			}
 			Text(Self.usageLine(load: machineLoad, isLastSampleFailed: isLastSampleFailed))
 				.monospacedDigit()
+				.onTapGesture {
+					isEditingPeriod.wrappedValue = false
+				}
 		}
 		.padding(.horizontal, 12)
 		.padding(.vertical, 8)

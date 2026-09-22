@@ -1,18 +1,25 @@
 import SwiftUI
 
 ///	The update-period control: a narrow text field with a menu of presets beside it, a combo box composed in SwiftUI,
-///	which has none. The field shows a draft of the user's typing until it commits, on Return or when the field loses
-///	focus; a preset sets the period directly. Design.md, sections 2.11 and 5.9; the reasoning in B.2.
+///	which has none. The field shows a draft of the user's typing until it commits: on Return, when the field loses
+///	focus, and when the window stops being the key window. A preset sets the period directly. Design.md, sections 2.11
+///	and 5.9; the reasoning in B.2.
 struct PeriodControl: View {
 
 	///	The period in force, owned by whoever owns the monitor.
 	@Binding var period: SamplingPeriod
 
+	///	Whether the field has focus. Losing it commits. The state is owned above, by the main view, because nothing else
+	///	in this window can take focus: a click on the graphs or the header's text clears it from there, which is the
+	///	only way a click elsewhere ends editing.
+	let isEditing: FocusState<Bool>.Binding
+
+	///	Whether this window is the key window. Switching to another window or app does not move SwiftUI's focus, so the
+	///	field would otherwise keep an uncommitted draft; the window ceasing to be key commits it.
+	@Environment(\.controlActiveState) private var controlActiveState
+
 	///	What the field shows: the user's typing until it commits, and the period otherwise.
 	@State private var draft = ""
-
-	///	Whether the field has focus. Losing it commits.
-	@FocusState private var isEditing: Bool
 
 	var body: some View {
 		HStack(spacing: 4) {
@@ -22,12 +29,17 @@ struct PeriodControl: View {
 				.textFieldStyle(.roundedBorder)
 				.multilineTextAlignment(.trailing)
 				.frame(width: 44)
-				.focused($isEditing)
+				.focused(isEditing)
 				.onSubmit {
 					commit()
 				}
-				.onChange(of: isEditing) {
-					if !isEditing {
+				.onChange(of: isEditing.wrappedValue) {
+					if !(isEditing.wrappedValue) {
+						commit()
+					}
+				}
+				.onChange(of: controlActiveState) {
+					if controlActiveState != .key {
 						commit()
 					}
 				}

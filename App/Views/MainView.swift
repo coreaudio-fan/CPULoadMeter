@@ -26,15 +26,23 @@ struct MainView: View {
 	///	The sampling period, for the header's control.
 	@Binding var period: SamplingPeriod
 
+	///	Whether the header's period field has focus. Owned here so that a click on the graphs can clear it: nothing else
+	///	in the window can take focus, so without this a click elsewhere would leave the field editing.
+	@FocusState private var isEditingPeriod: Bool
+
 	var body: some View {
 		VStack(spacing: 0) {
-			HeaderView(processorName: processorName, cpuCount: histories.count, machineLoad: machineLoad, isLastSampleFailed: isLastSampleFailed, period: $period)
+			HeaderView(processorName: processorName, cpuCount: histories.count, machineLoad: machineLoad, isLastSampleFailed: isLastSampleFailed, period: $period, isEditingPeriod: $isEditingPeriod)
 				.frame(maxWidth: .infinity)
 				.fixedSize(horizontal: false, vertical: true)
 
 			Hairline()
 
 			LoadStackView(histories: histories, reportStepCount: reportStepCount)
+				.contentShape(Rectangle())
+				.onTapGesture {
+					isEditingPeriod = false
+				}
 		}
 		.frame(idealWidth: Self.idealWidth)
 	}
