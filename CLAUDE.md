@@ -121,7 +121,7 @@ On the Release build: closing the window leaves the app running and Window ▸ C
 
 ### Cadence and agreement with `top` (2026-09-22)
 
-Measured on the Release product with the per-sample log line. With no window open, period 2 s, 74 seconds: intervals min 1.89 s, median 2.00 s, max 2.12 s — no App Nap stretching — and every sample about 90 ms after its deadline (1.8–131 ms), which looks like the sleep's system-chosen tolerance; harmless, because the deadline advances by the period, not from the wake. A sample costs 0.3 ms. Against `top -l 16 -s 2` over the same phases, busy agreed within 0.73 points idle and 0.01 points under four `yes` processes; `yes > /dev/null` shows as system time. Design.md D.6 has the numbers.
+Measured on the Release product with the per-sample log line. With no window open, period 2 s, 74 seconds: intervals min 1.89 s, median 2.00 s, max 2.12 s — no App Nap stretching — and every sample about 90 ms after its deadline (1.8–131 ms), which looks like the sleep's system-chosen tolerance; harmless, because the deadline advances by the period, not from the wake. A sample costs 0.3 ms. Through a ten-second live resize and a ten-second menu hold at a 1 s period: 105 samples, intervals 0.936–1.061 s, no stall — the task-based loop has none of a default-mode `Timer`'s run-loop-mode pauses; lateness was ~50 ms there, so the tolerance is about 5% of the period. Against `top -l 16 -s 2` over the same phases, busy agreed within 0.73 points idle and 0.01 points under four `yes` processes; `yes > /dev/null` shows as system time. Design.md D.6 has the numbers.
 
 ### The menu bar extra, seen from inside (2026-09-21)
 
