@@ -14,6 +14,13 @@ struct LoadStackView: View {
 	///	Told the step count whenever the width changes: the monitor's `setStepCount`.
 	let reportStepCount: @MainActor (Int) -> Void
 
+	///	Whether the stack has appeared. Before it has, SwiftUI lays the window out once at a default size that no one
+	///	sees -- 900 points wide here -- and reporting that width would cut a history built while no window was open down
+	///	to 900 steps before the placement widened it again with zeros. The report at the placed width arrives after
+	///	`onAppear` (observed 2026-09-22; Design.md, D.6), and if one ever did not, nothing would be lost: the monitor's
+	///	initial count comes from the same stored width the placement uses.
+	@State private var hasAppeared = false
+
 	var body: some View {
 		VStack(spacing: 0) {
 			ForEach(histories.indices, id: \.self) { cpuIndex in
@@ -32,7 +39,12 @@ struct LoadStackView: View {
 		.onGeometryChange(for: Int.self) { proxy in
 			LoadGraph.stepCount(forWidth: proxy.size.width)
 		} action: { stepCount in
-			reportStepCount(stepCount)
+			if hasAppeared {
+				reportStepCount(stepCount)
+			}
+		}
+		.onAppear {
+			hasAppeared = true
 		}
 	}
 
