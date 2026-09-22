@@ -14,11 +14,13 @@ struct MenuBarExtraMenu: View {
 		Button("Show CPULoadMeter") {
 			openWindow(id: CPULoadMeterApp.mainWindowID)
 
-			//	The one AppKit call in the app. With openWindow alone, choosing this item while another app was
-			//	frontmost did not bring this app to the foreground, and SwiftUI's environment offers no action that
-			//	activates an app. Activation is a request the system may decline; it is made here in response to the
-			//	user's click on the menu. Design.md, section 5.2, B.1, and D.6.
-			NSApplication.shared.activate()
+			//	The one AppKit call in the app, and its form matters. SwiftUI's environment offers no action that
+			//	activates an app, and with openWindow alone this item did not bring the app to the foreground.
+			//	Activation is a request the system may decline, and it declined the bare NSApplication.activate() every
+			//	time, from this menu and from a probe; the same request naming the frontmost app as the one handing
+			//	activation over was granted every time (Design.md, D.6). The result is the system's answer, and nothing
+			//	further can be done with a refusal. Design.md, section 5.2 and B.1.
+			_ = NSRunningApplication.current.activate(from: NSWorkspace.shared.frontmostApplication ?? .current, options: [])
 		}
 		SettingsLink()
 	}
