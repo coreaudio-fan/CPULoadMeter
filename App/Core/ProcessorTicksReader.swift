@@ -1,16 +1,16 @@
 import Foundation
 
-///	The host port, obtained once. Every `mach_host_self()` call hands back a fresh send right that the caller
-///	is expected to release, so asking on every sample would leak port rights; libtop asks once, and so does this.
+///	The host port, obtained once. Every `mach_host_self()` call hands back a fresh send right that the caller is
+///	expected to release, so asking on every sample would leak port rights; libtop asks once, and so does this.
 nonisolated private let hostPort = mach_host_self()
 
 ///	Reads every CPU's cumulative tick counters from the kernel, in CPU ID order.
 ///
-///	The kernel allocates the reply in this task's address space on every call, and nothing frees it but the
-///	caller: 2,000 calls without the `vm_deallocate` were seen to cost 2,000 distinct pages. So the buffer is
-///	freed here, unconditionally, before the function returns, and what it returns is a Swift array: no
-///	pointer, and no obligation, escapes. The buffer cannot be allocated once and reused, because it is not
-///	the caller's to allocate. Design.md, section 5.6 and B.12.
+///	The kernel allocates the reply in this task's address space on every call, and nothing frees it but the caller:
+///	2,000 calls without the `vm_deallocate` were seen to cost 2,000 distinct pages. So the buffer is freed here,
+///	unconditionally, before the function returns, and what it returns is a Swift array: no pointer, and no obligation,
+///	escapes. The buffer cannot be allocated once and reused, because it is not the caller's to allocate. Design.md,
+///	section 5.6 and B.12.
 nonisolated func readProcessorTicks() throws(MachError) -> [CPUTicks] {
 	var cpuCount: natural_t = 0
 	var reply: processor_info_array_t? = nil

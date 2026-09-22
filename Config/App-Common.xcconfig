@@ -27,12 +27,12 @@ CODE_SIGN_ENTITLEMENTS = Config/App.entitlements
 ENABLE_HARDENED_RUNTIME = YES
 
 //	Documentation Compiler - Options
-//	Project-Common.xcconfig turns the documentation compiler on for every target. This project publishes no
-//	API -- it has no framework -- so there is nothing for it to enforce, and both targets opt out.
+//	Project-Common.xcconfig turns the documentation compiler on for every target. This project publishes no API -- it
+//	has no framework -- so there is nothing for it to enforce, and both targets opt out.
 RUN_DOCUMENTATION_COMPILER = NO
 
 //	Swift Compiler - Concurrency
-//	The app target defaults to MainActor isolation, mirroring Apple's app template; the project-wide
-//	baseline in Project-Common.xcconfig stays nonisolated for the Tests target. The pure core lives in
-//	this target too, so every top-level declaration in App/Core is marked nonisolated in source.
+//	The app target defaults to MainActor isolation, mirroring Apple's app template; the project-wide baseline in
+//	Project-Common.xcconfig stays nonisolated for the Tests target. The pure core lives in this target too, so every
+//	top-level declaration in App/Core is marked nonisolated in source.
 SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor

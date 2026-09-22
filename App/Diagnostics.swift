@@ -1,12 +1,13 @@
 import Foundation
 import os
 
-///	The app's diagnostics: debug-level messages, under the bundle identifier, read from a shell with
-///	`log stream --debug --predicate 'subsystem == "coreaudio-fan.CPULoadMeter"'`.
+///	The app's diagnostics: debug-level messages, under the bundle identifier.
 ///
-///	They are how the cadence, the cost, and the agreement with `top` are observed without eyes, and they are
-///	present in every build: a debug-level message is not persisted and costs almost nothing when no one is
-///	listening. Design.md, section 5.8 and B.17.
+///	A shell reads them with `log stream --debug --predicate 'subsystem == "coreaudio-fan.CPULoadMeter"'`.
+///
+///	They are how the cadence, the cost, and the agreement with `top` are observed without eyes, and they are present in
+///	every build: a debug-level message is not persisted and costs almost nothing when no one is listening. Design.md,
+///	section 5.8 and B.17.
 nonisolated enum Diagnostics {
 
 	///	The one logger. The subsystem is the bundle identifier, as the spec requires.

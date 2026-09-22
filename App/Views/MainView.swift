@@ -1,7 +1,7 @@
 import SwiftUI
 
-///	The main window's content. A placeholder until the header and the graphs arrive: the processor's name
-///	and the CPU count, which is what the header will lead with.
+///	The main window's content. A placeholder until the header and the graphs arrive: the processor's name and the CPU
+///	count, which is what the header will lead with.
 struct MainView: View {
 
 	///	The processor's name, or `nil` if the kernel would not say.
