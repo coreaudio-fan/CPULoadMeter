@@ -12,14 +12,14 @@ struct MainWindowContent: View {
 	///	The processor's name, read once at launch; `nil` if the kernel would not say.
 	let processorName: String?
 
-	///	The sampler, owned by the app.
-	let monitor: LoadMonitor
+	///	The sampler, owned by the app. Bindable, so that the header's control can bind to its period.
+	@Bindable var monitor: LoadMonitor
 
 	///	The sampling period in whole seconds, stored again whenever the monitor's changes: the monitor persists nothing.
 	@AppStorage(DefaultsKey.samplingPeriodSeconds) private var samplingPeriodSeconds = SamplingPeriod.default.seconds
 
 	var body: some View {
-		MainView(processorName: processorName, cpuCount: monitor.state.histories.count, machineLoad: monitor.state.machineLoad, histories: monitor.state.histories, reportStepCount: monitor.setStepCount)
+		MainView(processorName: processorName, machineLoad: monitor.state.machineLoad, isLastSampleFailed: monitor.lastError != nil, histories: monitor.state.histories, reportStepCount: monitor.setStepCount, period: $monitor.period)
 			.onChange(of: monitor.period) {
 				samplingPeriodSeconds = monitor.period.seconds
 			}
