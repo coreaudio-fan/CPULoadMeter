@@ -13,23 +13,29 @@ struct MonitorState: Sendable, Equatable {
 	///	One history per CPU, in CPU ID order, each at `stepCount` steps.
 	let histories: [LoadHistory]
 
+	///	The ticks that elapsed machine-wide over the last interval, summed across the CPUs, or `nil` until two samples
+	///	with the same CPU count have been taken.
+	let machineDelta: TickDelta?
+
 	///	The machine-wide load over the last interval, or `nil` until two samples with the same CPU count have been
 	///	taken.
-	let machineLoad: CPULoad?
+	var machineLoad: CPULoad? {
+		machineDelta.map(CPULoad.init)
+	}
 
 	///	How many loads every history holds.
 	let stepCount: Int
 
 	///	The state before any sample, with histories to be created at `stepCount` steps.
 	init(stepCount: Int) {
-		self.init(previousTicks: [], histories: [], machineLoad: nil, stepCount: max(0, stepCount))
+		self.init(previousTicks: [], histories: [], machineDelta: nil, stepCount: max(0, stepCount))
 	}
 
 	///	The members, unchecked: the two operations below make every state.
-	private init(previousTicks: [CPUTicks], histories: [LoadHistory], machineLoad: CPULoad?, stepCount: Int) {
+	private init(previousTicks: [CPUTicks], histories: [LoadHistory], machineDelta: TickDelta?, stepCount: Int) {
 		self.previousTicks = previousTicks
 		self.histories = histories
-		self.machineLoad = machineLoad
+		self.machineDelta = machineDelta
 		self.stepCount = stepCount
 	}
 
@@ -42,13 +48,13 @@ struct MonitorState: Sendable, Equatable {
 			result = MonitorState(
 				previousTicks: ticks,
 				histories: zip(histories, loads).map { $0.appending($1) },
-				machineLoad: CPULoad(deltas.reduce(.zero, +)),
+				machineDelta: deltas.reduce(.zero, +),
 				stepCount: stepCount)
 		} else {
 			result = MonitorState(
 				previousTicks: ticks,
 				histories: Array(repeating: LoadHistory(stepCount: stepCount), count: ticks.count),
-				machineLoad: nil,
+				machineDelta: nil,
 				stepCount: stepCount)
 		}
 		return result
@@ -60,7 +66,7 @@ struct MonitorState: Sendable, Equatable {
 		return MonitorState(
 			previousTicks: previousTicks,
 			histories: histories.map { $0.resized(toStepCount: newCount) },
-			machineLoad: machineLoad,
+			machineDelta: machineDelta,
 			stepCount: newCount)
 	}
 

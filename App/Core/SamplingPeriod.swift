@@ -18,6 +18,11 @@ struct SamplingPeriod: Sendable, Equatable {
 	///	The period in whole seconds.
 	let seconds: Int
 
+	///	The period as the clock measures it.
+	var duration: Duration {
+		.seconds(seconds)
+	}
+
 	///	A period of `seconds`, or `nil` if that is outside the range.
 	init?(seconds: Int) {
 		guard Self.range.contains(seconds) else {

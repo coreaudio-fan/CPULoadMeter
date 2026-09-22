@@ -18,4 +18,28 @@ enum Diagnostics {
 		logger.debug("Launched on \(processorName ?? "an unnamed processor", privacy: .public) with \(cpuCount) CPUs")
 	}
 
+	///	Written once per sample, with numbers only: the sample's index; how late it was and how long it took, in
+	///	milliseconds; the CPU count; and the machine-wide user, system, and idle tick deltas, which are what `top` is
+	///	checked against. A sample that was a baseline only, the CPU count having changed, has no deltas and says so.
+	static func logSample(index: Int, lateness: Duration, duration: Duration, cpuCount: Int, delta: TickDelta?) {
+		let late = milliseconds(lateness)
+		let took = milliseconds(duration)
+		if let delta {
+			logger.debug("Sample \(index): late \(late, format: .fixed(precision: 1)) ms, took \(took, format: .fixed(precision: 3)) ms, \(cpuCount) CPUs, ticks user \(delta.user) system \(delta.system) idle \(delta.idle)")
+		} else {
+			logger.debug("Sample \(index): late \(late, format: .fixed(precision: 1)) ms, took \(took, format: .fixed(precision: 3)) ms, \(cpuCount) CPUs, baseline")
+		}
+	}
+
+	///	Written whenever the step count changes.
+	static func logStepCount(_ stepCount: Int) {
+		logger.debug("Step count \(stepCount)")
+	}
+
+	///	A duration in milliseconds, for the log.
+	private static func milliseconds(_ duration: Duration) -> Double {
+		let components = duration.components
+		return (Double(components.seconds) * 1_000) + (Double(components.attoseconds) / 1e15)
+	}
+
 }

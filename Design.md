@@ -254,9 +254,9 @@ Two impure readers complete the core: `readProcessorTicks()` (§5.6) and `readPr
 
 `LoadMonitor` is an `@Observable`, `@MainActor` class. It owns the sampling task, the period, the current `MonitorState`, and the last error. It is created and owned by the `App`, not by any view, so its lifetime is the process's.
 
-- **Its two collaborators are passed in.** The tick reader is an initializer parameter of type `() throws(MachError) -> [CPUTicks]`, defaulting to `readProcessorTicks`. The sleep is a second, of type `(ContinuousClock.Instant) async throws -> Void`, defaulting to `Task.sleep(until:clock:)` on the continuous clock. With both scripted, the monitor's whole behavior — what it does with a failed read, with a changed CPU count, with a new period — is exercised deterministically and without waiting on a real clock.
+- **Its two collaborators are passed in.** The tick reader is an initializer parameter of type `@MainActor () throws(MachError) -> [CPUTicks]`, defaulting to `readProcessorTicks`. The sleep is a second, of type `@MainActor (ContinuousClock.Instant) async throws -> Void`, defaulting to `Task.sleep(until:clock:)` on the continuous clock. Both types say `@MainActor` because the monitor calls both from the main actor, and a scripted collaborator may then keep main-actor state; a nonisolated function such as the real reader converts to either. With both scripted, the monitor's whole behavior — what it does with a failed read, with a changed CPU count, with a new period — is exercised deterministically and without waiting on a real clock.
 - **It persists nothing.** The `App` reads the stored period, hands it to the monitor, and stores it again when it changes. The monitor's tests run inside the app and share its real defaults, so a monitor that wrote its own period could change the user's setting during a test run.
-- **The step count flows up from the view.** `LoadStackView` measures its width, converts it to a step count with `LoadView.stepLength`, and reports it to the monitor, which resizes its state. This is the one place the model depends on view geometry, and it does so by design (§2.10).
+- **The step count flows up from the view.** `LoadStackView` measures its width, converts it to a step count with `LoadGraph.stepCount(forWidth:)`, and reports it to the monitor, which resizes its state. This is the one place the model depends on view geometry, and it does so by design (§2.10).
 - **Views take values, not the monitor.** A parent reads what it needs from the monitor in its `body` and passes plain values down; `LoadView` receives one `LoadHistory`.
 
 *Rationale: B.4 (history), B.16 (the injected reader), B.17 (the injected sleep; no persistence).*
@@ -367,9 +367,9 @@ struct LoadView: View {
 
 	var body: some View {
 		Canvas { context, size in
-			let steps = history.loads.reversed().prefix(Int(size.width / Self.stepLength)).enumerated()
+			let steps = history.loads.reversed().prefix(Int(size.width / LoadGraph.stepLength)).enumerated()
 			let path = steps.reduce(into: Path()) { path, step in
-				let x = size.width - (CGFloat(step.offset) * Self.stepLength) - (lineWidth / 2)
+				let x = size.width - (CGFloat(step.offset) * LoadGraph.stepLength) - (lineWidth / 2)
 				path.move(to: CGPoint(x: x, y: size.height))
 				path.addLine(to: CGPoint(x: x, y: size.height * (1 - step.element.total)))
 			}
@@ -377,7 +377,7 @@ struct LoadView: View {
 		}
 	}
 
-	nonisolated static let stepLength: CGFloat = 1
+	static let stepLength: CGFloat = 1
 }
 ```
 
@@ -388,7 +388,7 @@ The drawing rules:
 - **A line's center is a pixel boundary plus half the line width.** The right edge of step *k*'s line sits at `width − k × stepLength`, a whole point, and the center is half a line width to its left.
 - **One path and one stroke** per LoadView per redraw.
 - **`stepLength` is 1 pt. `lineWidth` defaults to 1 pt**, which tiles the steps into a solid silhouette; the default's final value is chosen by eye against the running app (§8). It is a parameter rather than a constant so that the rendering tests can exercise more than one width, and because the later menu-bar graph will want its own.
-- **`stepLength` is `nonisolated`** because a `View` is main-actor-isolated through the protocol, its static constants with it, and `LoadStackView` reads this one inside `onGeometryChange`'s `@Sendable` transform, which runs off the main actor.
+- **`stepLength` lives in the core**, as `LoadGraph.stepLength`, with `LoadGraph.stepCount(forWidth:)` beside it: the view that draws, the view that measures its width, and the app when it starts the monitor from a stored width all read the same constant. In the core it needs no isolation annotation, where a `View`'s static constant would, since a `View` is main-actor-isolated through the protocol and `LoadStackView` reads it inside `onGeometryChange`'s `@Sendable` transform.
 
 *Rationale: B.3.*
 
@@ -517,11 +517,11 @@ The design leans on some platform behavior that is recalled or documented but no
 | **P14** | `onGeometryChange` delivers the width `LoadStackView` needs; if not, a `GeometryReader` does. A history read in a parent's `body` and passed down redraws the `LoadView` when it changes. | §4.2, §5.5 |
 | **P4** | Strokes are crisp at 1× and 2× — the canvas's origin sits on a pixel boundary; a zero load draws nothing; unrounded heights do not leave soft top edges. Choose the final `lineWidth` here. | §2.8, §5.5 |
 | **P5** | The period control commits on Return and on focus loss, rejects and reverts, and takes presets, as specified. | §2.11, §5.9 |
-| **P6** | Sampling continues during live resize and menu tracking. Observe the cadence with the window closed and only the extra showing. Read from the per-sample log message (§5.8): intervals that match the period, and no gap beyond one and a half periods. | §2.2, §5.8 |
+| **P6** | *Confirmed 2026-09-22 (D.6): windowless, and through a ten-second live resize and a ten-second menu hold, with no interval over 1.07 s at a 1 s period.* Sampling continues during live resize and menu tracking. Observe the cadence with the window closed and only the extra showing. Read from the per-sample log message (§5.8): intervals that match the period, and no gap beyond one and a half periods. | §2.2, §5.8 |
 | **P7** | Redraw and sampling cost at full display width: the per-sample duration from the log, and the app's own CPU share from `top`, with the stored window width preset to the display's. Instruments where it helps. Decide whether sampling stays on the main actor. | §5.5, §5.8 |
 | **P8** | *Confirmed 2026-09-21 (D.6).* *Re-confirmed by the regression test:* no leak from the kernel's reply buffer. | §5.6, §6 |
 | **P10** | *With the later iteration, not version 1:* whether a `MenuBarExtra`'s label can host a live `Canvas`. The fallbacks are rendering the graph to an `Image` on each sample, or an `NSStatusItem`. | §8 |
-| **P11** | *Re-confirm in the real app:* the machine-wide figure agrees with `top` running alongside, idle and under a known load. Do not expect agreement with `ps`, or with `top`'s per-process column; they measure something else. | §2.9 |
+| **P11** | *Confirmed 2026-09-22 (D.6): busy within 0.01 points of `top` under load, 0.73 idle with the phases unaligned.* *Re-confirm in the real app:* the machine-wide figure agrees with `top` running alongside, idle and under a known load. Do not expect agreement with `ps`, or with `top`'s per-process column; they measure something else. | §2.9 |
 
 ## 8. Deferred, and out of scope
 
@@ -1329,6 +1329,10 @@ The §7 checks as they were run, with what was seen. Conditions unless stated: t
 | **P9**, third check | **Failed with any app but Finder in front.** You. | With the cooperative `NSRunningApplication.activate(from:options:)` shipped, *Show CPULoadMeter* brought the app to the foreground when a Finder window was in front, and did not when any other app's window was — Xcode's, for one. Both AppKit forms rolled back; the limitation is documented (D19). |
 | **P9**, the activation routes measured | Probe, from inside the app, 2026-09-21; its rival app was Finder only, which the third check showed to be a special case. | A hosted test put a Finder window in front (`NSWorkspace.shared.open` of `/Applications`) and tried each route, reading `NSApplication.isActive`, `NSWorkspace.frontmostApplication`, the window's `isKeyWindow`, and the front-to-back owners of the on-screen layer-0 windows from `CGWindowListCopyWindowInfo`. Three cycles in one process: `NSApplication.shared.activate()` — declined 3/3 (`isActive` false, Finder frontmost); `activate(ignoringOtherApps: true)` — declined; `makeKeyAndOrderFront(nil)` — the window rose from fourth to second, behind Finder's key window, app inactive; `orderFrontRegardless()` — the window first, app inactive; `NSRunningApplication.current.activate(from: frontmost, options: [])` — returned `true` and activated 3/3, the window key and first, and returned `true` again when already active. `NSWorkspace.openApplication(at:)` on the app's own bundle activated the *other* running instance of the same bundle (launched from Xcode), so it measured nothing. Test host launched inactive, behind Terminal. |
 | **P13** the extra and the standard UI | **Held except one item.** You. | `SettingsLink` works from the extra; the traffic lights are present; About shows the name, version, and copyright. The extra *can* be removed by command-drag, and with the window closed that quit the app — as Apple's `MenuBarExtra` overview says it will. Accepted, D20. |
+| **P6**, with no window | **Held.** Period 2 s, the checkbox preset to false, the Release app launched with `open` and left with only the extra showing for 74 s: 37 samples, intervals min 1.89 s, median 2.00 s, max 2.12 s, none over 3 s — no App Nap stretching. Every sample woke 1.8–131 ms after its deadline, median 88 ms, which looks like the sleep's system-chosen tolerance; the cadence is unaffected because the deadline advances by the period, not from the wake. A sample took 0.31 ms median, 0.67 ms at most. 4,806 ticks per sample across 24 CPUs, median, against 24 × 200 = 4,800 for a 100 Hz tick. The resize and menu-tracking half is a hand check. | `/usr/bin/log stream --debug` on the subsystem, parsed for the per-sample line; `defaults write` for the two presets, deleted afterwards. |
+| **P6**, during a live resize and a menu hold | **Held.** You acted, the log was captured. | Period 1 s, the Release app launched with `open`; you dragged a window edge continuously for about ten seconds, then held a menu open for about ten seconds. 105 samples over 103 s: intervals min 0.936 s, median 1.000 s, max 1.061 s, none over 1.5 s. Lateness median 50 ms, max 66 ms — about 5% of the period, as the 2 s run's 90 ms was, so the sleep's tolerance scales with the period. A sample took 0.70 ms at most. The task-based loop has none of the run-loop-mode stalls a default-mode `Timer` would have had (B.9). |
+| **P11** agreement with `top` | **Held.** `top -l 16 -s 2 -n 0` alongside the app, first sample dropped. Idle machine: ours user 20.11%, system 3.60%, idle 76.28% over 17 samples; `top` 19.50%, 3.49%, 77.11% over 15 — busy within 0.73 points, with the phases unaligned. Under four `yes > /dev/null`: ours 2.19%, 17.36%, 80.45%; `top` 2.21%, 17.33%, 80.55% — busy within 0.01 points. (`yes` to `/dev/null` is system time, not user.) The four were killed by PID and confirmed gone. | The same stream, its tick deltas summed over each phase and divided once; `top`'s `CPU usage` lines averaged. |
+| The monitor's compile checks | Three answered by the compiler, 2026-09-22. | `didSet` on an `@Observable` stored property compiles and runs. A nonisolated typed-throws function converts to the `@MainActor` reader type as a default argument. A plain `deinit` cannot cancel the loop — "main actor-isolated property 'loop' can not be referenced from a nonisolated context" — and `isolated deinit` (SE-0371) can. |
 | The test bundle links core code the app does not use | Observation from PR 2, 2026-09-22. | The plan had flagged undefined symbols as a risk once the test bundle referenced core types nothing in the app calls, with a Debug-only `DEAD_CODE_STRIPPING = NO` as the fallback. It did not arise: all six core types and their 34 tests link and run against the unchanged settings, so no divergence was recorded. |
 | The extra, seen from inside | Observation, not a check. | `CGWindowListCopyWindowInfo` from another process shows no status item this project can interpret. A disposable hosted test importing AppKit listed `NSApplication.shared.windows`: an `NSStatusBarWindow`, visible, level 25, 32×30 at the top-right of a 3200-wide screen, and the Window menu holding `CPULoadMeter`. |
 

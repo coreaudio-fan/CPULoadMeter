@@ -37,6 +37,8 @@ struct MonitorStateTests {
 
 		#expect(state.histories.map(\.loads) == [[.zero, load(4)], [.zero, load(12)]])
 		#expect(state.machineLoad == load(8))
+		#expect(state.machineDelta?.user == 16)
+		#expect(state.machineDelta?.idle == 16)
 		#expect(state.previousTicks == [ticks(user: 104, idle: 912), ticks(user: 212, idle: 804)])
 		#expect(state.stepCount == 2)
 	}
