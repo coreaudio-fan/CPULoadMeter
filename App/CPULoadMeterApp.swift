@@ -17,10 +17,23 @@ struct CPULoadMeterApp: App {
 	///	Whether the main window opens at launch: the settings window's one checkbox.
 	@AppStorage(DefaultsKey.isMainWindowOpenedAtLaunch) private var isMainWindowOpenedAtLaunch = true
 
+	///	The processor's name, read once at launch; `nil` if the kernel would not say.
+	private let processorName: String?
+
+	///	How many CPUs the kernel reported at launch. Zero if the read failed, until the monitor arrives.
+	private let cpuCount: Int
+
+	///	Reads the processor's name and the CPU count, and writes the launch diagnostic.
+	init() {
+		processorName = readProcessorName()
+		cpuCount = (try? readProcessorTicks())?.count ?? 0
+		Diagnostics.logLaunch(processorName: processorName, cpuCount: cpuCount)
+	}
+
 	var body: some Scene {
 		//	The title is what the Window menu shows. The window itself displays none.
 		Window("CPULoadMeter", id: Self.mainWindowID) {
-			MainView()
+			MainView(processorName: processorName, cpuCount: cpuCount)
 		}
 		.windowStyle(.hiddenTitleBar)
 		.defaultLaunchBehavior(isMainWindowOpenedAtLaunch ? .presented : .suppressed)
