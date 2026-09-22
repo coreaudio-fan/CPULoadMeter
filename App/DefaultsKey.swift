@@ -7,4 +7,10 @@ enum DefaultsKey {
 	///	Whether the main window opens at launch. A `Bool`, true when absent.
 	static let isMainWindowOpenedAtLaunch = "isMainWindowOpenedAtLaunch"
 
+	///	The main window's last width in points. A `Double`, absent until the window has been shown.
+	static let mainWindowWidth = "mainWindowWidth"
+
+	///	The main window's last height in points. A `Double`, absent until the window has been shown.
+	static let mainWindowHeight = "mainWindowHeight"
+
 }
