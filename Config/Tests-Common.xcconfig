@@ -1,0 +1,32 @@
+//	Architectures
+SDKROOT = macosx
+SUPPORTED_PLATFORMS = macosx
+
+//	Deployment
+MACOSX_DEPLOYMENT_TARGET = 26.0
+
+//	Linking - General
+//	The test bundle is hosted in the app: it links against the app's executable, which is how @testable import reaches
+//	the app's internal declarations, and it is loaded into the app's process.
+BUNDLE_LOADER = $(TEST_HOST)
+
+//	Localization
+STRING_CATALOG_GENERATE_SYMBOLS = NO
+SWIFT_EMIT_LOC_STRINGS = NO
+
+//	Packaging
+GENERATE_INFOPLIST_FILE = YES
+PRODUCT_BUNDLE_IDENTIFIER = coreaudio-fan.CPULoadMeter.Tests
+PRODUCT_NAME = CPULoadMeter Tests
+
+//	Testing
+//	Must equal the app's $(BUILT_PRODUCTS_DIR)/$(EXECUTABLE_PATH) exactly. A mismatch is only a build-system warning,
+//	which does not fail a warnings-as-errors build, so it has to be looked for in the log. This target deliberately sets
+//	no signing, runpath, or entitlement overrides: it must inherit the project's team signing to pass the host's library
+//	validation, and the build system supplies the rest.
+TEST_HOST = $(BUILT_PRODUCTS_DIR)/CPULoadMeter.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/CPULoadMeter
+
+//	Documentation Compiler - Options
+//	Project-Common.xcconfig turns the documentation compiler on for every target. This project publishes no API -- it
+//	has no framework -- so there is nothing for it to enforce, and both targets opt out.
+RUN_DOCUMENTATION_COMPILER = NO
