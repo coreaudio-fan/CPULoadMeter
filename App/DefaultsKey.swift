@@ -7,6 +7,10 @@ enum DefaultsKey {
 	///	Whether the main window opens at launch. A `Bool`, true when absent.
 	static let isMainWindowOpenedAtLaunch = "isMainWindowOpenedAtLaunch"
 
+	///	The sampling period in whole seconds. An `Int`, 1 when absent; a stored value out of range falls back to the
+	///	default.
+	static let samplingPeriodSeconds = "samplingPeriodSeconds"
+
 	///	The main window's last width in points. A `Double`, absent until the window has been shown.
 	static let mainWindowWidth = "mainWindowWidth"
 

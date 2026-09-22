@@ -24,17 +24,26 @@ struct CPULoadMeterApp: App {
 	///	The main window's last height, kept with its partner.
 	@AppStorage(DefaultsKey.mainWindowHeight) private var mainWindowHeight: Double?
 
+	///	The sampling period in whole seconds, as the user last chose it.
+	@AppStorage(DefaultsKey.samplingPeriodSeconds) private var samplingPeriodSeconds = SamplingPeriod.default.seconds
+
+	///	The sampler, owned here so that its lifetime is the process's, not a window's.
+	@State private var monitor: LoadMonitor
+
 	///	The processor's name, read once at launch; `nil` if the kernel would not say.
 	private let processorName: String?
 
-	///	How many CPUs the kernel reported at launch. Zero if the read failed, until the monitor arrives.
-	private let cpuCount: Int
-
-	///	Reads the processor's name and the CPU count, and writes the launch diagnostic.
+	///	Reads the processor's name, creates the monitor from the stored period and the stored window width, and writes
+	///	the launch diagnostic. The defaults are read here directly because the property wrappers above are not usable
+	///	before the app exists; they read the same store.
 	init() {
+		let defaults = UserDefaults.standard
+		let storedPeriod = (defaults.object(forKey: DefaultsKey.samplingPeriodSeconds) as? Int).flatMap(SamplingPeriod.init(seconds:))
+		let storedWidth = (defaults.object(forKey: DefaultsKey.mainWindowWidth) as? Double).map { CGFloat($0) }
+		let monitor = LoadMonitor(period: storedPeriod ?? .default, stepCount: LoadGraph.stepCount(forWidth: storedWidth ?? MainView.idealWidth))
+		_monitor = State(initialValue: monitor)
 		processorName = readProcessorName()
-		cpuCount = (try? readProcessorTicks())?.count ?? 0
-		Diagnostics.logLaunch(processorName: processorName, cpuCount: cpuCount)
+		Diagnostics.logLaunch(processorName: processorName, cpuCount: monitor.state.histories.count)
 	}
 
 	///	The stored window size when both halves are present, and `nil` otherwise.
@@ -49,7 +58,7 @@ struct CPULoadMeterApp: App {
 	var body: some Scene {
 		//	The title is what the Window menu shows. The window itself displays none.
 		Window("CPULoadMeter", id: Self.mainWindowID) {
-			MainView(processorName: processorName, cpuCount: cpuCount)
+			MainView(processorName: processorName, cpuCount: monitor.state.histories.count, machineLoad: monitor.state.machineLoad)
 
 				//	Fills the window, so that what is measured below is the window's content, not the view's own size.
 				.frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -65,6 +74,11 @@ struct CPULoadMeterApp: App {
 				} action: { size in
 					mainWindowWidth = size.width
 					mainWindowHeight = size.height
+				}
+
+				//	The monitor persists nothing; the app stores the period again whenever the monitor's changes.
+				.onChange(of: monitor.period) {
+					samplingPeriodSeconds = monitor.period.seconds
 				}
 		}
 		.windowStyle(.hiddenTitleBar)
@@ -85,8 +99,11 @@ struct CPULoadMeterApp: App {
 			SettingsView()
 		}
 
+		//	The extra receives the monitor now, unused, so that the later live graph is a change to one view rather than
+		//	to the app's wiring (Design.md, section 5.1).
 		MenuBarExtra("CPULoadMeter", systemImage: "cpu") {
 			MenuBarExtraMenu()
+				.environment(monitor)
 		}
 	}
 

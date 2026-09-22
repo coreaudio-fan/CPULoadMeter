@@ -254,9 +254,9 @@ Two impure readers complete the core: `readProcessorTicks()` (§5.6) and `readPr
 
 `LoadMonitor` is an `@Observable`, `@MainActor` class. It owns the sampling task, the period, the current `MonitorState`, and the last error. It is created and owned by the `App`, not by any view, so its lifetime is the process's.
 
-- **Its two collaborators are passed in.** The tick reader is an initializer parameter of type `() throws(MachError) -> [CPUTicks]`, defaulting to `readProcessorTicks`. The sleep is a second, of type `(ContinuousClock.Instant) async throws -> Void`, defaulting to `Task.sleep(until:clock:)` on the continuous clock. With both scripted, the monitor's whole behavior — what it does with a failed read, with a changed CPU count, with a new period — is exercised deterministically and without waiting on a real clock.
+- **Its two collaborators are passed in.** The tick reader is an initializer parameter of type `@MainActor () throws(MachError) -> [CPUTicks]`, defaulting to `readProcessorTicks`. The sleep is a second, of type `@MainActor (ContinuousClock.Instant) async throws -> Void`, defaulting to `Task.sleep(until:clock:)` on the continuous clock. Both types say `@MainActor` because the monitor calls both from the main actor, and a scripted collaborator may then keep main-actor state; a nonisolated function such as the real reader converts to either. With both scripted, the monitor's whole behavior — what it does with a failed read, with a changed CPU count, with a new period — is exercised deterministically and without waiting on a real clock.
 - **It persists nothing.** The `App` reads the stored period, hands it to the monitor, and stores it again when it changes. The monitor's tests run inside the app and share its real defaults, so a monitor that wrote its own period could change the user's setting during a test run.
-- **The step count flows up from the view.** `LoadStackView` measures its width, converts it to a step count with `LoadView.stepLength`, and reports it to the monitor, which resizes its state. This is the one place the model depends on view geometry, and it does so by design (§2.10).
+- **The step count flows up from the view.** `LoadStackView` measures its width, converts it to a step count with `LoadGraph.stepCount(forWidth:)`, and reports it to the monitor, which resizes its state. This is the one place the model depends on view geometry, and it does so by design (§2.10).
 - **Views take values, not the monitor.** A parent reads what it needs from the monitor in its `body` and passes plain values down; `LoadView` receives one `LoadHistory`.
 
 *Rationale: B.4 (history), B.16 (the injected reader), B.17 (the injected sleep; no persistence).*
@@ -367,9 +367,9 @@ struct LoadView: View {
 
 	var body: some View {
 		Canvas { context, size in
-			let steps = history.loads.reversed().prefix(Int(size.width / Self.stepLength)).enumerated()
+			let steps = history.loads.reversed().prefix(Int(size.width / LoadGraph.stepLength)).enumerated()
 			let path = steps.reduce(into: Path()) { path, step in
-				let x = size.width - (CGFloat(step.offset) * Self.stepLength) - (lineWidth / 2)
+				let x = size.width - (CGFloat(step.offset) * LoadGraph.stepLength) - (lineWidth / 2)
 				path.move(to: CGPoint(x: x, y: size.height))
 				path.addLine(to: CGPoint(x: x, y: size.height * (1 - step.element.total)))
 			}
@@ -377,7 +377,7 @@ struct LoadView: View {
 		}
 	}
 
-	nonisolated static let stepLength: CGFloat = 1
+	static let stepLength: CGFloat = 1
 }
 ```
 
@@ -388,7 +388,7 @@ The drawing rules:
 - **A line's center is a pixel boundary plus half the line width.** The right edge of step *k*'s line sits at `width − k × stepLength`, a whole point, and the center is half a line width to its left.
 - **One path and one stroke** per LoadView per redraw.
 - **`stepLength` is 1 pt. `lineWidth` defaults to 1 pt**, which tiles the steps into a solid silhouette; the default's final value is chosen by eye against the running app (§8). It is a parameter rather than a constant so that the rendering tests can exercise more than one width, and because the later menu-bar graph will want its own.
-- **`stepLength` is `nonisolated`** because a `View` is main-actor-isolated through the protocol, its static constants with it, and `LoadStackView` reads this one inside `onGeometryChange`'s `@Sendable` transform, which runs off the main actor.
+- **`stepLength` lives in the core**, as `LoadGraph.stepLength`, with `LoadGraph.stepCount(forWidth:)` beside it: the view that draws, the view that measures its width, and the app when it starts the monitor from a stored width all read the same constant. In the core it needs no isolation annotation, where a `View`'s static constant would, since a `View` is main-actor-isolated through the protocol and `LoadStackView` reads it inside `onGeometryChange`'s `@Sendable` transform.
 
 *Rationale: B.3.*
 
