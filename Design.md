@@ -376,8 +376,6 @@ struct LoadView: View {
 			context.stroke(path, with: .color(.primary), lineWidth: lineWidth)
 		}
 	}
-
-	static let stepLength: CGFloat = 1
 }
 ```
 

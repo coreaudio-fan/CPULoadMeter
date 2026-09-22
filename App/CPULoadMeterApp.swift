@@ -58,7 +58,7 @@ struct CPULoadMeterApp: App {
 	var body: some Scene {
 		//	The title is what the Window menu shows. The window itself displays none.
 		Window("CPULoadMeter", id: Self.mainWindowID) {
-			MainView(processorName: processorName, cpuCount: monitor.state.histories.count, machineLoad: monitor.state.machineLoad)
+			MainView(processorName: processorName, cpuCount: monitor.state.histories.count, machineLoad: monitor.state.machineLoad, histories: monitor.state.histories, reportStepCount: monitor.setStepCount)
 
 				//	Fills the window, so that what is measured below is the window's content, not the view's own size.
 				.frame(maxWidth: .infinity, maxHeight: .infinity)
