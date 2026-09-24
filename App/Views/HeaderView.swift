@@ -33,7 +33,7 @@ struct HeaderView: View {
 						isEditingPeriod.wrappedValue = false
 					}
 				Spacer()
-				PeriodControl(period: $period, isEditing: isEditingPeriod)
+				SecondsControl(prompt: "Update every", unit: "seconds", value: $period, isEditing: isEditingPeriod)
 			}
 			Text(Self.usageLine(load: machineLoad, isLastSampleFailed: isLastSampleFailed))
 				.monospacedDigit()

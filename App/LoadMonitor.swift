@@ -1,9 +1,10 @@
 import Foundation
 import Observation
 
-///	The sampler: one task that sleeps until a deadline, samples, and advances the deadline, for the life of the process.
-///	It owns the period, the current state, and the last error, and it persists nothing. Design.md, sections 4.2, 5.8,
-///	and 5.12.
+///	The sampler: one task that sleeps until a deadline, samples, and advances the deadline. It owns the period, the
+///	current state, and the last error, and it persists nothing. There are two: the window's, which samples while the
+///	window is shown, and the menu bar's, which samples for the life of the process. Design.md, sections 4.2, 5.8, and
+///	5.12.
 ///
 ///	Its two collaborators are passed in, so that what it does with a failed read, a changed CPU count, and a new period
 ///	can be exercised with scripted ticks and a scripted sleep, deterministically and without a real clock. Both are
@@ -16,6 +17,9 @@ import Observation
 	///	Sleeps until an instant on the continuous clock, or throws once the sleeping task is cancelled.
 	typealias Sleep = @MainActor (ContinuousClock.Instant) async throws -> Void
 
+	///	What this monitor samples for, in the diagnostics: "window" or "menu bar".
+	let name: String
+
 	///	The sampling period. Setting it while sampling restarts the loop: the next sample is one new period away.
 	var period: SamplingPeriod {
 		didSet {
@@ -25,8 +29,8 @@ import Observation
 		}
 	}
 
-	///	Whether the loop is running. It runs only while the main window is shown: the window's root view resumes the
-	///	monitor when it appears and suspends it when it disappears, and a suspended monitor holds no history.
+	///	Whether the loop is running. The view that shows the graph resumes the monitor when it appears and suspends it
+	///	when it disappears, and a suspended monitor holds no history.
 	private(set) var isSampling = false
 
 	///	Everything sampled so far.
@@ -48,7 +52,8 @@ import Observation
 	private var sampleIndex = 0
 
 	///	Makes a monitor that is not yet sampling: no history, no baseline, no loop until `resume()`.
-	init(period: SamplingPeriod, stepCount: Int, readTicks: @escaping TickReader = readProcessorTicks, sleep: @escaping Sleep = { try await Task.sleep(until: $0, clock: .continuous) }) {
+	init(name: String, period: SamplingPeriod, stepCount: Int, readTicks: @escaping TickReader = readProcessorTicks, sleep: @escaping Sleep = { try await Task.sleep(until: $0, clock: .continuous) }) {
+		self.name = name
 		self.period = period
 		self.readTicks = readTicks
 		self.sleep = sleep
@@ -64,7 +69,7 @@ import Observation
 		sample()
 		isSampling = true
 		restart()
-		Diagnostics.logSampling(isStarting: true, cpuCount: state.histories.count, stepCount: state.stepCount)
+		Diagnostics.logSampling(monitor: name, isStarting: true, cpuCount: state.histories.count, stepCount: state.stepCount)
 	}
 
 	///	Stops sampling and drops the history: with no window to show it there is nothing to keep, and the next
@@ -77,7 +82,7 @@ import Observation
 			isSampling = false
 			state = MonitorState(stepCount: state.stepCount)
 			lastError = nil
-			Diagnostics.logSampling(isStarting: false, cpuCount: 0, stepCount: state.stepCount)
+			Diagnostics.logSampling(monitor: name, isStarting: false, cpuCount: 0, stepCount: state.stepCount)
 		}
 	}
 
@@ -91,7 +96,7 @@ import Observation
 	func setStepCount(_ stepCount: Int) {
 		if stepCount != state.stepCount {
 			state = state.resized(toStepCount: stepCount)
-			Diagnostics.logStepCount(stepCount)
+			Diagnostics.logStepCount(monitor: name, stepCount)
 		}
 	}
 
@@ -130,7 +135,7 @@ import Observation
 					self.sample()
 				}
 				self.sampleIndex += 1
-				Diagnostics.logSample(index: self.sampleIndex, lateness: woke - deadline, duration: duration, cpuCount: self.state.histories.count, delta: self.state.machineDelta)
+				Diagnostics.logSample(monitor: self.name, index: self.sampleIndex, lateness: woke - deadline, duration: duration, cpuCount: self.state.histories.count, delta: self.state.machineDelta)
 				deadline = nextDeadline(after: deadline, period: period, now: ContinuousClock.now)
 			}
 		}

@@ -14,7 +14,7 @@
 
 ## 1. Overview
 
-CPULoadMeter graphs the load on each CPU core over time. It recreates a lost Cocoa app in Swift and SwiftUI, as a vehicle for learning how to draw to the screen. Its eventual form draws the graph into the menu bar with no windows open; version 1 builds the window and lays the groundwork for that.
+CPULoadMeter graphs the load on each CPU core over time. It recreates a lost Cocoa app in Swift and SwiftUI, as a vehicle for learning how to draw to the screen. It draws the graph in a window and, since its second iteration, in the menu bar, where no window need be open; version 1 built the window.
 
 Three principles govern the design:
 
@@ -38,7 +38,8 @@ Three principles govern the design:
 ### 2.2 Lifetime
 
 - Closing the main window does not quit the application.
-- Sampling runs while the main window is shown. Closing the window stops it and discards the history; showing the window again starts over, as at launch: a fresh baseline, zeros, and the first load one period later.
+- Sampling for the window runs while the main window is shown. Closing the window stops it and discards the history; showing the window again starts over, as at launch: a fresh baseline, zeros, and the first load one period later.
+- Sampling for the menu bar graph runs on a monitor of its own, at its own period, from the moment the item appears until the process ends. It is what the app shows with no window open.
 - The application quits from its application menu or the Dock, as any app does.
 
 *Rationale: B.1, B.9.*
@@ -55,11 +56,13 @@ The menu bar is SwiftUI's default set of menus, unmodified. That provides:
 
 ### 2.4 The menu bar extra
 
-- The app places an item in the system menu bar, shown as the `cpu` symbol.
+- The app places an item in the system menu bar, shown as the live graph: every CPU's load history side by side, the first CPU leftmost, with a divider between neighbors and an endcap at each end drawn the same way. Each CPU's graph is drawn by the rules of §2.8, one point per step, and is as many steps wide as the menu bar's history length holds whole periods of the menu bar's update period: 60 s of history at a 1 s period is 60 steps; 60 s at 7 s is 8, the partial period dropped; a length shorter than the period still gives one step. A divider is 3 pt wide and stands 1 pt clear of the graph on either side. The graph is 16 pt tall. With 24 CPUs at the defaults the image is 1,563 pt wide, which is accepted.
+- The graph's period and history length are settings of their own (§2.12), independent of the window's period. The graph samples on its own monitor from the moment the item appears, for the life of the process (§2.2). A change to either setting resizes every CPU's history at once, by the rules of §2.10.
+- The graph is handed to the system as a template image, black and clear, which the system colors for the menu bar it is in, light or dark, and for the item's selected state. The plot is opaque; the dividers and endcaps are black at 25% opacity.
 - Its menu has two items: **Show CPULoadMeter**, which shows the main window or brings it forward, and **Settings…**. When another app is active, choosing *Show CPULoadMeter* does not bring this app to the foreground: SwiftUI has no way to activate the app, and a window of an inactive app cannot be ordered above the active app's key window. A known limitation of version 1, deferred (§8).
 - The item is always present: there is no setting to hide it. The user can remove it by command-dragging it out of the menu bar, as with any menu bar extra, and if no window is showing when that happens the system quits the app. Nothing prevents either; version 1 accepts them.
 
-*Rationale: B.1.*
+*Rationale: B.1, B.18.*
 
 ### 2.5 The main window
 
@@ -122,9 +125,10 @@ The header says nothing about core kinds.
 - Each new load shifts the others one step left; the oldest is discarded.
 - When the view widens, the added steps hold zeros and are the oldest. When it narrows, the oldest loads are discarded first.
 - With no window open there is no history: sampling stops when the window is hidden and starts over when it is shown (§2.2). The step count survives: the next history starts at the count of the window's last width, or, before any window has reported one, of the stored window width, or of the first-launch window's if none has ever been stored.
-- The history is not saved between launches.
+- The menu bar graph keeps a history of its own, one per CPU, as many steps long as its history length holds whole periods (§2.4). A change to either setting resizes it by the rules above: zeros at the oldest end on growth, the oldest discarded first on shrink. It starts with the item and is never dropped.
+- Neither history is saved between launches.
 
-*Rationale: B.4.*
+*Rationale: B.4, B.18.*
 
 ### 2.11 The update period
 
@@ -134,16 +138,20 @@ The header says nothing about core kinds.
 - A new period takes effect immediately: the next sample is one new period away.
 - Changing the period keeps the existing history. Steps sampled at the old period remain and simply stand for a different duration.
 - The period is remembered between launches.
+- This is the window's period. The menu bar graph has one of its own, set in the settings window through the same control with the same range, presets, and rules (§2.12).
 
 *Rationale: B.2, B.9.*
 
 ### 2.12 Settings
 
-- The settings window has one checkbox, **Open main window at launch**, on by default.
+- The settings window has the checkbox **Open main window at launch**, on by default, and below it the menu bar graph's two settings.
 - The checkbox always decides whether the main window opens at launch. The system does not restore the window on its own.
 - With the box unchecked, clicking the Dock icon does not show the main window. The menu bar extra and the Window menu do.
+- **Update every** is the menu bar graph's period: the same control as the window's (§2.11), with the same range of 1 to 60, the same presets 1, 2, 5, 10, and 30, the same commit and reject-and-revert rules, and the same default of 1, but a value of its own.
+- **Keep** is the menu bar graph's history length in seconds, from 30 to 120, with presets 30, 60, 90, and 120 and a default of 60, through the same control and the same rules. The two together set each CPU's graph width (§2.4); a change to either takes effect at once.
+- Both are remembered between launches.
 
-*Rationale: B.8.*
+*Rationale: B.8, B.18.*
 
 ### 2.13 Appearance
 
@@ -155,12 +163,13 @@ Colors are the system's semantic colors and follow the Light and Dark appearance
 | Secondary header text | secondary label color (`Color.secondary`) |
 | Hairlines | separator color |
 | Window and graph background | the default window background, unpainted |
+| Menu bar graph | a template image of black and clear, colored by the system for the menu bar; the dividers and endcaps black at 25% opacity |
 
 *Rationale: B.14.*
 
 ### 2.14 Accessibility
 
-The graphs carry no accessibility elements. The header is ordinary text and controls, which is what VoiceOver reads.
+The graphs carry no accessibility elements, and the menu bar's image is decorative. The header and the settings are ordinary text and controls, which is what VoiceOver reads.
 
 *Rationale: B.14.*
 
@@ -227,9 +236,11 @@ kernel ──host_processor_info──▶ readProcessorTicks()                  
                                    │ MonitorState
                                    ▼
         LoadMonitor  @Observable @MainActor — owns the Task, the period, the state    (App)
+        one for the window, one for the menu bar
              ▲                     │ observation
   step count │                     ▼
    MainView ─▶ HeaderView(name, total, period)  +  LoadStackView ─▶ LoadView(history) × N
+   MenuBarGraphLabel ─▶ MenuBarGraph(histories) ─ImageRenderer─▶ a template Image, the item's label
 ```
 
 ### 4.1 The pure core
@@ -244,7 +255,10 @@ kernel ──host_processor_info──▶ readProcessorTicks()                  
 | `UsagePercentages` | The header's three whole percentages: user, system, idle | Each in 0…100, summing to exactly 100. The only initializer takes a `CPULoad` and rounds cumulatively (§5.4). |
 | `LoadHistory` | One CPU's retained loads, oldest first | **Always exactly `stepCount` loads.** `init(stepCount:)` is all zeros. `appending(_:)` drops the oldest and adds the newest, so the length cannot change. `resized(toStepCount:)` prepends zeros to grow and keeps the newest suffix to shrink. All three return new values. |
 | `SamplingPeriod` | Whole seconds; `presets`; `default` | 1…60, through failable initializers only — `init?(seconds:)` and `init?(text:)`. There is no way to construct an out-of-range period. |
+| `HistoryLength` | The menu bar graph's whole seconds of history; `presets`; `default`; `stepCount(at:)` | 30…120, through the same two failable initializers. The step count at a period is the whole periods the length holds, a partial one dropped, and never fewer than one. |
 | `MonitorState` | The previous ticks, one `LoadHistory` per CPU, and the latest machine-wide load | `advanced(with: [CPUTicks])` is the entire per-sample logic as one pure function. `resized(toStepCount:)` maps the resize over every history. A change in the CPU count resets the baseline and replaces the histories with zeros at the current step count; the first sample is the same rule, going from no CPUs to N. |
+
+`SamplingPeriod` and `HistoryLength` share the `WholeSeconds` protocol — the seconds, the presets, and the parse from text — which is what their one control is generic over (§5.9).
 
 The scheduling rule is pure as well: given the previous deadline, the period, and the present instant, `nextDeadline` returns the following deadline, collapsing any that were missed (§5.8).
 
@@ -252,12 +266,12 @@ Two impure readers complete the core: `readProcessorTicks()` (§5.6) and `readPr
 
 ### 4.2 The shell
 
-`LoadMonitor` is an `@Observable`, `@MainActor` class. It owns the sampling task, the period, the current `MonitorState`, and the last error. It is created and owned by the `App`, not by any view, so its lifetime is the process's; but it samples only between `resume()` and `suspend()`, which the window's root view calls as it appears and disappears (§5.1, §5.8).
+`LoadMonitor` is an `@Observable`, `@MainActor` class. It owns the sampling task, the period, the current `MonitorState`, and the last error. It is created and owned by the `App`, not by any view, so its lifetime is the process's; but it samples only between `resume()` and `suspend()`. There are two: the window's, which its root view resumes and suspends as the window appears and disappears, and the menu bar's, which the extra's label resumes when it appears and nothing suspends, with a period and a step count of its own (§2.4, §5.1, §5.8). Each carries a name for the diagnostics.
 
 - **Its two collaborators are passed in.** The tick reader is an initializer parameter of type `@MainActor () throws(MachError) -> [CPUTicks]`, defaulting to `readProcessorTicks`. The sleep is a second, of type `@MainActor (ContinuousClock.Instant) async throws -> Void`, defaulting to `Task.sleep(until:clock:)` on the continuous clock. Both types say `@MainActor` because the monitor calls both from the main actor, and a scripted collaborator may then keep main-actor state; a nonisolated function such as the real reader converts to either. With both scripted, the monitor's whole behavior — what it does with a failed read, with a changed CPU count, with a new period — is exercised deterministically and without waiting on a real clock.
 - **It persists nothing.** The `App` reads the stored period, hands it to the monitor, and stores it again when it changes. The monitor's tests run inside the app and share its real defaults, so a monitor that wrote its own period could change the user's setting during a test run.
 - **The step count flows up from the view.** `LoadStackView` measures its width, converts it to a step count with `LoadGraph.stepCount(forWidth:)`, and reports it to the monitor, which resizes its state. This is the one place the model depends on view geometry, and it does so by design (§2.10).
-- **Views take values, not the monitor.** A parent view reads what it needs from the monitor in its `body` and passes plain values down; `LoadView` receives one `LoadHistory`. That parent is `MainWindowContent`, the window's root view, and never the `App` itself: reading the monitor in a scene body re-evaluates the scenes, and rebuilds the menus, on every sample (§5.1).
+- **Views take values, not the monitor.** A parent view reads what it needs from the monitor in its `body` and passes plain values down; `LoadView` receives one `LoadHistory`. That parent is `MainWindowContent`, the window's root view, and for the menu bar's monitor `MenuBarGraphLabel`, the extra's label; never the `App` itself: reading a monitor in a scene body re-evaluates the scenes, and rebuilds the menus, on every sample (§5.1).
 
 *Rationale: B.4 (history), B.16 (the injected reader), B.17 (the injected sleep; no persistence).*
 
@@ -273,8 +287,8 @@ struct CPULoadMeterApp: App {
 	@AppStorage("isMainWindowOpenedAtLaunch") private var isMainWindowOpenedAtLaunch = true
 	@AppStorage("mainWindowWidth") private var mainWindowWidth: Double?
 	@AppStorage("mainWindowHeight") private var mainWindowHeight: Double?
-	@AppStorage("samplingPeriodSeconds") private var samplingPeriodSeconds = SamplingPeriod.default.seconds
 	@State private var monitor: LoadMonitor
+	@State private var menuBarMonitor: LoadMonitor
 
 	var body: some Scene {
 		Window("CPULoadMeter", id: "main") {
@@ -295,9 +309,10 @@ struct CPULoadMeterApp: App {
 			SettingsView()
 		}
 
-		MenuBarExtra("CPULoadMeter", systemImage: "cpu") {
+		MenuBarExtra {
 			MenuBarExtraMenu()
-				.environment(monitor)
+		} label: {
+			MenuBarGraphLabel(monitor: menuBarMonitor)
 		}
 	}
 }
@@ -308,7 +323,7 @@ Three rules this arrangement must keep:
 - **`Window` is declared before `MenuBarExtra`.** Otherwise the window is not presented at launch even when asked for.
 - **The extra stays inserted.** Its presence in the menu bar is what lets the app outlive its window and what gives the window its Window-menu entry. No `isInserted` binding is offered, so the app never removes it; the user can (§2.4), and the app does not resist that.
 - **The window's title is user-visible** in the Window menu, even though the window displays none.
-- **The app's body reads nothing the monitor publishes.** A scene body that reads an observed value is re-evaluated whenever it changes, and the menus are rebuilt with the scenes: read there, the monitor's state rebuilt the menu bar and the extra's menu once a second, which changed an open menu's items under the mouse and closed it mid-click. `MainWindowContent`, the window's root view, is the one place the monitor is read; it passes plain values to `MainView` and stores the period when it changes. The app hands the monitor to it, and to the extra, as an object.
+- **The app's body reads nothing the monitor publishes.** A scene body that reads an observed value is re-evaluated whenever it changes, and the menus are rebuilt with the scenes: read there, the monitor's state rebuilt the menu bar and the extra's menu once a second, which changed an open menu's items under the mouse and closed it mid-click. `MainWindowContent`, the window's root view, is the one place the window's monitor is read; it passes plain values to `MainView` and stores the period when it changes. `MenuBarGraphLabel`, the extra's label, is the one place the menu bar's monitor is read. The app hands each monitor to its view as an object.
 
 There is no `import AppKit` and no app delegate.
 
@@ -319,19 +334,21 @@ There is no `import AppKit` and no app delegate.
 - The first-launch size (§2.5) is therefore not a constant computed ahead of layout, which would need the header's height before the header exists. It is the content's own ideal size: `MainView` has an ideal width of 480 pt and each `LoadView` an ideal height of 20 pt, and the header contributes its natural height.
 - Within one run nothing more is needed: a closed window's object survives, hidden, and reopens as it was.
 
-The `App`'s initializer creates the monitor with the stored period and the initial step count (§2.10); `MainWindowContent` stores the period again whenever the monitor's changes.
-
-The menu bar extra receives the monitor now, unused, so that the later live graph is a change to one view rather than to the app's wiring. `MainWindowContent` resumes the monitor when it appears and suspends it when it disappears, which is what confines sampling to the time the window is shown (§2.2).
+The `App`'s initializer creates both monitors: the window's with the stored period and the initial step count (§2.10), and the menu bar's with its stored period and history length, at the step count the two imply. `MainWindowContent` stores the window's period again whenever the monitor's changes, and resumes the monitor when it appears and suspends it when it disappears, which is what confines the window's sampling to the time the window is shown (§2.2). The settings window stores the menu bar's two settings, and `MenuBarGraphLabel` applies them (§5.2).
 
 *Rationale: B.1, B.8, B.17 (the first-launch size). Experiments: D.2.*
 
-### 5.2 The menu bar extra's menu
+### 5.2 The menu bar extra's label and menu
 
-`MenuBarExtraMenu` has two items: a button titled *Show CPULoadMeter* that calls `openWindow(id: "main")`, which opens the window or brings an open one to the front; and a `SettingsLink`.
+**The label** is `MenuBarGraphLabel`, the extra's root view and the one place the menu bar's monitor is read. On every re-evaluation — every sample — it renders `MenuBarGraph` with the monitor's histories through `ImageRenderer` at the display's scale and shows the result as `Image(decorative:scale:)` in template rendering mode; with nothing to render it shows the `cpu` symbol instead. It resumes the monitor when it appears, and when either stored setting changes it applies both to the monitor: the period, if it differs, since setting an equal period would still restart the loop, and the step count the two imply.
+
+An image, rather than the canvas itself, because a `MenuBarExtra`'s label is realized as the status item button's image: a `Canvas` given as the label draws nothing and leaves the item 16 pt wide with no image at all, while an `Image` becomes the button's image and is replaced on every re-evaluation (D24; D.6). A template image is what the guidelines ask of a menu bar extra's image, and it is what makes the colors the system's (§2.13).
+
+**The menu.** `MenuBarExtraMenu` has two items: a button titled *Show CPULoadMeter* that calls `openWindow(id: "main")`, which opens the window or brings an open one to the front; and a `SettingsLink`.
 
 With another app active, the button does not bring this app to the foreground (§2.4). SwiftUI's environment offers no action that activates an app, and the AppKit activation requests tried in its place were declined by the system, or granted only with a Finder window in front; they were rolled back, and the limitation stands for version 1 (§8).
 
-*Rationale: B.1. Results: D.6.*
+*Rationale: B.1, B.18. Results: D.6.*
 
 ### 5.3 Main window layout
 
@@ -357,7 +374,7 @@ The three whole percentages come from `UsagePercentages`, which rounds cumulativ
 
 ### 5.5 The drawing
 
-The drawing is a pure function of its input: `LoadStackView` takes every CPU's `LoadHistory` as plain values and draws them as one stroked path in one `Canvas`, a row per LoadView. The rule for one row, `appendLines(of:to:in:lineWidth:)`, is the one the menu-bar graph will draw with:
+The drawing is a pure function of its input: `LoadStackView` takes every CPU's `LoadHistory` as plain values and draws them as one stroked path in one `Canvas`, a row per LoadView. The rule for one row, `appendLines(of:to:in:lineWidth:)`, is the one the menu bar graph draws with too:
 
 ```swift
 static func appendLines(of history: LoadHistory, to path: inout Path, in rect: CGRect, lineWidth: CGFloat) {
@@ -370,13 +387,15 @@ static func appendLines(of history: LoadHistory, to path: inout Path, in rect: C
 }
 ```
 
+`MenuBarGraph` draws with the same function in one `Canvas` of its own. From the left: a divider slot, a 1 pt gap, CPU 0's graph, a gap, a divider slot, a gap, CPU 1's graph, and so on, ending with a divider slot after the last graph, so that the first and last slots are the endcaps. A slot is 3 pt wide and full height, black at 25% opacity over an opaque black plot, since the image is a template (§2.4); the pitch from one slot to the next is *3 + 1 + steps + 1*, CPU *i*'s graph sits at *i × pitch + 4*, and the width is *CPUs × pitch + 3*: 1,563 pt for 24 CPUs at 60 steps.
+
 The drawing rules:
 
 - **The walk starts at the bottom-right.** Step 0 is the newest load; each later step is one `stepLength` further left. `reversed()` puts the newest first, and `prefix` covers the frame or two during a live resize when the history has not yet caught up with the view.
 - **The y-axis points down.** The row's bottom edge is `rect.maxY`, and a full-height line ends at `rect.minY`.
 - **A line's center is a pixel boundary plus half the line width.** The right edge of step *k*'s line sits at `width − k × stepLength`, a whole point, and the center is half a line width to its left.
 - **One path and one stroke** for every LoadView per redraw, and one fill for the hairlines.
-- **`stepLength` is 1 pt. `lineWidth` defaults to 1 pt**, which tiles the steps into a solid silhouette; the default's final value is chosen by eye against the running app (§8). It is a parameter of `LoadStackView` rather than a constant so that the rendering tests can exercise more than one width, and because the later menu-bar graph will want its own.
+- **`stepLength` is 1 pt. `lineWidth` defaults to 1 pt**, which tiles the steps into a solid silhouette; the default's final value is chosen by eye against the running app (§8). It is a parameter of `LoadStackView` and of `MenuBarGraph` rather than a constant so that the rendering tests can exercise more than one width, and so that the menu bar graph could take a width of its own; it draws at 1 pt too.
 - **`stepLength` lives in the core**, as `LoadGraph.stepLength`, with `LoadGraph.stepCount(forWidth:)` beside it: the view that draws, the view that measures its width, and the app when it starts the monitor from a stored width all read the same constant. In the core it needs no isolation annotation, where a `View`'s static constant would, since a `View` is main-actor-isolated through the protocol and `LoadStackView` reads it inside `onGeometryChange`'s `@Sendable` transform.
 
 *Rationale: B.3.*
@@ -415,20 +434,20 @@ load  = total == 0 ? 0 : busy / total      as CPULoad { user, system }; nice cou
 
 ### 5.8 Scheduling
 
-`LoadMonitor` owns one `Task` that loops: sleep until a deadline on a monotonic clock, sample, advance the deadline by the period. `resume()` zeroes the history at the current step count, takes the baseline synchronously, and starts the loop; `suspend()` cancels the loop and drops the history, keeping the step count; a period set while suspended waits for the next `resume()`. A cancellation can land after a sleep has ended and before that iteration runs, since both queue on the main actor, so the loop checks for cancellation after waking as well. If the new deadline is already past, it is reset to *now + period*, so missed deadlines collapse into one sample. Changing the period cancels the task and starts a new one, which is the whole of "takes effect immediately". The deadline rule is the pure function `nextDeadline` (§4.1), and the sleep is the injected one (§4.2), so the loop itself has no branches.
+`LoadMonitor` owns one `Task` that loops: sleep until a deadline on a monotonic clock, sample, advance the deadline by the period. `resume()` zeroes the history at the current step count, takes the baseline synchronously, and starts the loop; `suspend()` cancels the loop and drops the history, keeping the step count; a period set while suspended waits for the next `resume()`. A cancellation can land after a sleep has ended and before that iteration runs, since both queue on the main actor, so the loop checks for cancellation after waking as well. If the new deadline is already past, it is reset to *now + period*, so missed deadlines collapse into one sample. Changing the period cancels the task and starts a new one, which is the whole of "takes effect immediately". There are two monitors, and each runs this loop for itself. The deadline rule is the pure function `nextDeadline` (§4.1), and the sleep is the injected one (§4.2), so the loop itself has no branches.
 
 The sample runs on the main actor. It moves off the main actor only if measurement says it should (§7, P7).
 
-**Diagnostics.** The app writes four kinds of debug-level message with `os.Logger`, under its bundle identifier as the subsystem: one at launch, with the processor's name and the CPU count; one per sample, with numeric fields only — the sample's index, how late it was, how long it took, the CPU count, and the machine-wide user, system, and idle tick deltas; one whenever the step count changes; and one when sampling starts, with the CPU count and the step count, or stops. They are ordinary diagnostics, present in every build; debug-level messages are not persisted and cost almost nothing when no one is listening. They are how the cadence, the cost, and the agreement with `top` are observed from a shell (§7).
+**Diagnostics.** The app writes four kinds of debug-level message with `os.Logger`, under its bundle identifier as the subsystem: one at launch, with the processor's name and the CPU count; one per sample, with numeric fields only — the sample's index, how late it was, how long it took, the CPU count, and the machine-wide user, system, and idle tick deltas; one whenever the step count changes; and one when sampling starts, with the CPU count and the step count, or stops. Every message but the launch line names its monitor in brackets — `[window]` or `[menu bar]` — so the two streams can be told apart. They are ordinary diagnostics, present in every build; debug-level messages are not persisted and cost almost nothing when no one is listening. They are how the cadence, the cost, and the agreement with `top` are observed from a shell (§7).
 
 *Rationale: B.9, B.17 (the diagnostics).*
 
 ### 5.9 The period control
 
-`PeriodControl` is a composed combo box: a narrow `TextField` bound to a draft string, and beside it a borderless `Menu` whose items are `SamplingPeriod.presets`.
+`SecondsControl` is a composed combo box, generic over `WholeSeconds`: a narrow `TextField` bound to a draft string, and beside it a borderless `Menu` whose items are the type's `presets`. The header instantiates it for the window's `SamplingPeriod`; the settings window, once for the menu bar's `SamplingPeriod` and once for its `HistoryLength`, so that "the same control and the same rules" is one type.
 
-- **Commit** happens on Return (`onSubmit`) and when the field loses focus (`@FocusState`). The draft is parsed through `SamplingPeriod.init?(text:)`: either a period comes out, or the draft reverts to the current period.
-- **Nothing else in the window can take focus**, so a click elsewhere would leave the field editing. The main view owns the focus state and clears it when the graphs or the header's text are clicked, which is what makes a click elsewhere commit.
+- **Commit** happens on Return (`onSubmit`) and when the field loses focus (`@FocusState`). The draft is parsed through the type's `init?(text:)`: either a value comes out, or the draft reverts to the current one.
+- **Nothing else in the window can take focus**, so a click elsewhere would leave the field editing. The main view owns the focus state and clears it when the graphs or the header's text are clicked, which is what makes a click elsewhere commit; the settings view owns one per field and clears both on a click on the form.
 - **Switching to another window or app is not a focus loss.** The draft waits, uncommitted, until the user returns and decides — as in every Mac app.
 - **A preset pick** sets the period directly and rewrites the draft.
 - **The draft is a string**, not `TextField(value:format:)`, so that the parse and the reject-and-revert rule live in one visible place.
@@ -437,7 +456,7 @@ The sample runs on the main actor. It moves off the main actor only if measureme
 
 ### 5.10 Settings and persistence
 
-Four `UserDefaults` keys, through `@AppStorage`:
+Six `UserDefaults` keys, through `@AppStorage`:
 
 | Key | Type | Default | Read through |
 |---|---|---|---|
@@ -445,10 +464,12 @@ Four `UserDefaults` keys, through `@AppStorage`:
 | `samplingPeriodSeconds` | `Int` | `1` | `SamplingPeriod.init?(seconds:)`; an invalid stored value falls back to the default |
 | `mainWindowWidth` | `Double?` | absent | with its partner; both present, or the first-launch size is used |
 | `mainWindowHeight` | `Double?` | absent | as above |
+| `menuBarPeriodSeconds` | `Int` | `1` | `SamplingPeriod.init?(seconds:)`; an invalid stored value falls back to the default |
+| `menuBarHistorySeconds` | `Int` | `60` | `HistoryLength.init?(seconds:)`; likewise |
 
-All four are read and written by the `App` and the settings view. The monitor and the core touch no defaults (§4.2).
+All six are read and written by the `App`, the settings view, and the two root views. The monitors and the core touch no defaults (§4.2).
 
-`SettingsView` is a `Form` with one `Toggle`. Neither the load history nor the window's position is persisted.
+`SettingsView` is a `Form`: the `Toggle`, and a section holding the two `SecondsControl`s, each bound to its stored value through the type's `init?(seconds:)`, an invalid stored value reading as the default. Neither load history nor the window's position is persisted.
 
 ### 5.11 Colors
 
@@ -462,7 +483,7 @@ When `readProcessorTicks()` throws, the monitor records the error, leaves its st
 
 ### 5.13 Accessibility
 
-`Canvas` content is opaque to accessibility, and `LoadStackView` supplies none: elements offered through `accessibilityChildren` were never read — VoiceOver attached to the header's text field and pop-up and to nothing else in the window — so they were removed (D22). The app is for its author's own use.
+`Canvas` content is opaque to accessibility, and `LoadStackView` supplies none: elements offered through `accessibilityChildren` were never read — VoiceOver attached to the header's text field and pop-up and to nothing else in the window — so they were removed (D22). The menu bar's image is `Image(decorative:)`, which offers accessibility nothing, for the same reason. The app is for its author's own use.
 
 ## 6. Testing
 
@@ -479,6 +500,8 @@ swift-testing, with `@testable import CPULoadMeter`, hosted in the app. A test r
 - **`nextDeadline`:** the ordinary advance, and the collapse of missed deadlines.
 - **`LoadHistory`:** fixed length under append; zero-fill at the *oldest* end on growth; oldest-first loss on shrink; identity on a same-size resize; a zero step count.
 - **`SamplingPeriod`:** the boundaries 0, 1, 60, and 61, and unparseable text.
+- **`HistoryLength`:** the boundaries 29, 30, 120, and 121, unparseable text, and the step count: whole periods, a partial one dropped, and never fewer than one.
+- **`SecondsControl`'s commit rule**, `committedValue(from:current:)`, for both types: in range commits, everything else reverts.
 - **`MonitorState.advanced`:** first sample, steady state, and a change in the CPU count.
 
 **The monitor**, driven through its injected reader and sleep: a failed read keeps the last good sample; a changed CPU count resets the baseline; a new period restarts the loop, which is asserted on the next deadline the monitor asks to sleep until. No test waits on a real clock.
@@ -489,7 +512,7 @@ swift-testing, with `@testable import CPULoadMeter`, hosted in the app. A test r
 
 **One test stands in for an invariant the compiler cannot check.** "Every reply buffer is freed" is not expressible in the type system, so a runtime check guards it and says so: the test calls `readProcessorTicks()` a few thousand times and requires the physical footprint (`task_info`, `TASK_VM_INFO`) to grow by less than a bound well under what the leak would cost. The bound is wide, because the host process is busy; the test is proved able to fail by removing the `vm_deallocate` once.
 
-**The drawing** is tested on its pixels. `ImageRenderer` renders a `LoadView` at a fixed size, at scales 1 and 2, and the tests compare the alpha of every pixel against the pattern §5.5 predicts: which pixels each step's line covers, that a zero load draws nothing, that the newest load is anchored to the right edge, and what a 0.5 pt line does at each scale. The reference alpha is measured from a full-height line rather than assumed. What these cannot see is where the canvas sits in the real window, which stays a check by eye (§7, P4). When validating against `top` by eye, note that `top` prints 76.06% as `76.6%`.
+**The drawing** is tested on its pixels. `ImageRenderer` renders a `LoadView` at a fixed size, at scales 1 and 2, and the tests compare the alpha of every pixel against the pattern §5.5 predicts: which pixels each step's line covers, that a zero load draws nothing, that the newest load is anchored to the right edge, and what a 0.5 pt line does at each scale. The reference alpha is measured from a full-height line rather than assumed. `MenuBarGraph` is tested the same way, at its own 16 pt height, where a sixteenth of load is one pixel at 1x: two CPUs side by side with the first leftmost, the divider column between them fainter than the plot, and the width rule. What these cannot see is where the canvas sits in the real window, or what the system makes of the template image in the menu bar, which stay checks by eye (§7, P4 and P15). When validating against `top` by eye, note that `top` prints 76.06% as `76.6%`.
 
 *Rationale: B.10, B.16, B.17. Prior art: C.2. Seed code: D.4.*
 
@@ -511,20 +534,23 @@ The design leans on some platform behavior that is recalled or documented but no
 | **P6** | *Confirmed 2026-09-22 (D.6); the windowless half superseded by D23, since sampling no longer runs with no window: windowless, and through a ten-second live resize and a ten-second menu hold, with no interval over 1.07 s at a 1 s period.* Sampling continues during live resize and menu tracking. Observe the cadence with the window closed and only the extra showing. Read from the per-sample log message (§5.8): intervals that match the period, and no gap beyond one and a half periods. | §2.2, §5.8 |
 | **P7** | *Confirmed 2026-09-22 (D.6): about 4% of one core at 3,072 steps × 24 CPUs once a second, 0.76 ms per sample; sampling stays on the main actor.* Redraw and sampling cost at full display width: the per-sample duration from the log, and the app's own CPU share from `top`, with the stored window width preset to the display's. Instruments where it helps. Decide whether sampling stays on the main actor. | §5.5, §5.8 |
 | **P8** | *Confirmed 2026-09-21 (D.6).* *Re-confirmed by the regression test:* no leak from the kernel's reply buffer. | §5.6, §6 |
-| **P10** | *With the later iteration, not version 1:* whether a `MenuBarExtra`'s label can host a live `Canvas`. The fallbacks are rendering the graph to an `Image` on each sample, or an `NSStatusItem`. | §8 |
+| **P10** | *Answered 2026-09-24 (D24, D.6): a `Canvas` label draws nothing and leaves the item with no image; an `Image` label becomes the item's image and is replaced on every body evaluation; template rendering marks it a template. The graph is rendered to an image on each sample.* Whether a `MenuBarExtra`'s label can host a live `Canvas`. The fallbacks are rendering the graph to an `Image` on each sample, or an `NSStatusItem`. | §2.4, §5.2 |
+| **P15** | *Hand check.* The live graph in the menu bar: every CPU side by side, CPU 0 leftmost, a divider between; colored for Light and Dark and for the selected item; the extra's menu stays put while the label updates; a change to the period or the history length changes the width at once, and both survive a relaunch; the item's width at the defaults, 1,579 pt, sits in the menu bar without trouble. *Held on the first build but for the look of the dividers, which were then chosen from a sampler (D.6); the re-check is of that.* | §2.4, §2.12, §5.2 |
+| **P16** | *Measured 2026-09-24 (D.6): 1.5 to 1.6% of a core with the window closed, against 0.0 at rest before; accepted.* The cost of rendering the label once a second at 24 × 60 steps. | §5.2 |
 | **P11** | *Confirmed 2026-09-22 (D.6): busy within 0.01 points of `top` under load, 0.73 idle with the phases unaligned.* *Re-confirm in the real app:* the machine-wide figure agrees with `top` running alongside, idle and under a known load. Do not expect agreement with `ps`, or with `top`'s per-process column; they measure something else. | §2.9 |
 
 ## 8. Deferred, and out of scope
 
 **Decided later, against the running app:**
 
-- **The stroke width** was decided at P4: 1 pt (D17). A 0.5 pt stroke — on a 2× display, a one-pixel line and a one-pixel gap — remains the alternative the later menu-bar graph may want, which is why `lineWidth` is a parameter.
+- **The stroke width** was decided at P4: 1 pt (D17). A 0.5 pt stroke — on a 2× display, a one-pixel line and a one-pixel gap — remains an alternative the menu bar graph could take up, which is why `lineWidth` is a parameter; it draws at 1 pt (D27).
 - **The app icon.** A generic icon serves for bring-up. The real icon is a separate piece of work.
 - **Activation from the menu bar extra.** *Show CPULoadMeter* does not bring the app to the foreground while another app is active (§2.4, §5.2). SwiftUI has no activation action; the AppKit requests tried — the bare `NSApplication.activate()`, and the cooperative `NSRunningApplication.activate(from:options:)` naming the frontmost app — were declined, or granted only with a Finder window in front, and were rolled back rather than pursued further for what is a tertiary behavior. The measurements are in B.1 and D.6, so that a later attempt starts from them.
 
-**A later iteration:**
+**Later, if wanted:**
 
-- **The live graph in the menu bar.** Version 1's extra is a static symbol. Whether a `MenuBarExtra` label can host a live `Canvas` is unknown (P10); the fallbacks are rendering the graph to an `Image` on each sample, or an `NSStatusItem`. If the app ever becomes menu-bar-only, the extra's menu gains a Quit item.
+- **The menu bar item's width.** At 24 CPUs and the defaults it is 1,579 pt, about half of a 3,072-pt display's menu bar. One point per step was chosen knowing that (D27); a narrower step, or a cap on the width, stays available.
+- **Menu-bar-only.** If the app ever becomes menu-bar-only, the extra's menu gains a Quit item.
 
 **Not in version 1:** anything about core kinds; per-CPU labels; separate colors for user and system time; per-process information; GPU or Neural Engine load; history persisted between launches; the window's position persisted; export; localizations beyond English, though strings go through the String Catalog machinery the project settings enable.
 
@@ -563,6 +589,10 @@ The design leans on some platform behavior that is recalled or documented but no
 | **D22** | One view per CPU, or one canvas for all? | One canvas (2026-09-24). Measured on the Release build, 24 CPUs, 1 s period, over three runs each: the per-CPU views cost the app 1.5 to 1.6% of a core, one canvas 0.9 to 1.0%; WindowServer's share was not separable from noise. The profile put the app's cost in SwiftUI's layout, not the strokes. The pixel tests test the rows. A LoadView stays the name of one CPU's graph. Accessibility elements were first supplied through `accessibilityChildren` and then removed at your call: VoiceOver attached only to the header's two controls and never read them, and the app is for your own use. | You | §5.3, §5.5, §5.13 | B.3, D.6 |
 | **D21** | The App target's default actor isolation: SourceTools' `MainActor` override, or the project baseline? | The project baseline, `nonisolated`, as every sibling's `Project-Common.xcconfig` sets; the override is removed and, with it, every `nonisolated` the core carried to escape it. A `MainActor` default puts a whole target in one isolation domain so that a simple app need not think about synchronization — a crutch, and a poor design for anything else. Isolation is declared where it exists: the views and the `App` through SwiftUI's protocols, the monitor as `@MainActor`. | You | §3, §4.1, §4.2, §5.5 | B.17 |
 | **D20** | The extra can be removed by command-drag, and removing it with no window showing quits the app (P13). Prevent it? | Accept it and document it. SwiftUI offers no way to forbid the removal; re-inserting through an `isInserted` binding was the SwiftUI-only alternative, and an AppKit status item the full-Cocoa one. | You | §2.4, §5.1 | B.1, D.6 |
+| **D24** | How does the live graph get into the menu bar (P10)? | Rendered to an image on every sample and shown as a template image (2026-09-24). A `Canvas` as the label draws nothing: SwiftUI realizes the label as the status item button's image, and an `Image` label is replaced on every re-evaluation. No AppKit. | Me, by probe; the mechanism follows from what was observed | §2.4, §5.2 | B.18, D.6 |
+| **D25** | Does the menu bar graph sample on the window's monitor or its own? | Its own: a second `LoadMonitor`, with its own period and step count, resumed when the label appears and never suspended (2026-09-24). D23 stands for the window's. | You | §2.2, §2.10, §4.2, §5.1 | B.9, B.18 |
+| **D26** | Where do the menu bar graph's settings live, and what are they? | In the settings window, below the launch checkbox: the period, the same control as the header's with the same range, presets, rules, and default of 1; and the history length, 30 to 120 s, presets 30, 60, 90, and 120, default 60. Each CPU's width is the history length divided by the period in whole steps, rounded down, and never fewer than one. | You; the floor of one step is a default (A.2) | §2.4, §2.12, §5.9, §5.10 | B.18 |
+| **D27** | One point per step in the menu bar, or narrower? And does the graph replace the symbol or join it? | One point, as the window, accepting an item some 1,460 pt wide for 24 CPUs at the defaults; the graph replaces the `cpu` symbol, and the menu is unchanged. | You | §2.4, §8 | B.18 |
 
 ### A.2 Defaults adopted without discussion
 
@@ -587,6 +617,7 @@ These were offered as defaults marked *(proposed)*, to be vetoed, and were not. 
 | `LoadMonitor`'s tick reader is passed in. This was marked *(proposed)* when the specification was declared decided. It is folded in because the style guide's Testability section — "pass collaborators in rather than reaching out for them" — asks for it, and because it costs one line. | §4.2, §6 |
 | The buffer-leak regression test. | §6 |
 | **Added while writing the clean version, and not previously discussed:** before the first load is available the header's second line reads `CPU usage: —`. The earlier drafts specified the failure text but not this initial state. | §2.6 |
+| **The menu bar graph** (2026-09-24): it is 16 pt tall; a history length shorter than the period gives one step, not zero; the menu bar's sampling starts when the label first appears; the label shows the `cpu` symbol when there is nothing to render. The dividers were first 1 pt at 40%, a default; you found them indistinguishable from the graph and chose 3 pt at 25%, a point clear of the graph, with endcaps, from a sampler (D.6), so they are a decision, not a default. | §2.4, §2.13, §5.2 |
 
 ### A.3 How the document got here
 
@@ -603,6 +634,7 @@ These were offered as defaults marked *(proposed)*, to be vetoed, and were not. 
 - **Sampling only while shown** (2026-09-24). You asked that a hidden window stop sampling and a reopened one start fresh (D23); the change exposed a race between a cancelled loop and its last queued iteration, which the tests caught.
 - **One canvas** (2026-09-24). You noticed the window costing more CPU than it should, in the app and in WindowServer, and asked for an investigation driven by data. Logging was measured innocent; SwiftUI's layout of twenty-four views was the cost, and the graphs became rows of one canvas (D22).
 - **The isolation default** (2026-09-22). Reviewing PR 2 you asked why every core declaration was `nonisolated`; the answer exposed the App target's `MainActor` default, inherited from SourceTools, as the cause. You had it replaced by the project baseline (D21), and the keyword left the code.
+- **The menu bar graph** (2026-09-24). You specified the live graph — every core side by side, the width from a history length and a period of its own, the colors Apple's — and asked for questions first; four were settled (D24–D27). A probe answered P10 before any code: a `Canvas` label draws nothing, an `Image` label is the item's image, so the graph is rendered to a template image on every sample. The extra got a monitor of its own, the settings window the two settings, and the period control became generic over both. On the first build the technical side held, but the 1 pt dividers read as part of the graph; you asked for something more distinct, a point of clear space either side, and endcaps, and picked 3 pt at 25% from a sampler that drew every divider slot in a different style.
 
 ### A.4 What planning the implementation changed
 
@@ -653,7 +685,7 @@ What this established:
 
 **The Window-menu item** therefore needs no code. The system adds the entry, keeps it while the window is closed, and reopens the window from it **[O]** (variants D, H), so the spec's "no additions" holds. The documentation agrees: the system lists the window by its title *"in the list of available singleton windows that the Windows menu displays automatically"*, and `openWindow(id:)` *"brings the open window to the front"* if it is already open **[D]**.
 
-**What the extra shows.** The `cpu` symbol, and a menu of *Show CPULoadMeter* and *Settings…*. There is no *Quit*: SwiftUI has no terminate action **[R]**, and this is a regular app whose application menu and Dock icon already offer Quit. If the app ever becomes menu-bar-only, a Quit item becomes necessary, and it is the one AppKit call worth making. Whether a window opened from the extra's menu comes forward while another app is active is P9; if it does not, activation is an AppKit call, and that would be the moment to weigh the pure-SwiftUI principle against the behavior. It did not **[O]** (your check, D.6), and the moment came. SwiftUI has no such action: its environment's actions are `dismiss`, `dismissWindow`, `newDocument`, `openDocument`, `openSettings`, `openWindow`, `pushWindow`, `refresh`, `rename`, and `resetFocus` **[O]** (the SDK's interface, D.6), and `OpenWindowAction`'s page promises only to bring a window to the front **[D]**. `NSApplication.activate()` is documented as a request that *"doesn't guarantee app activation"*, with cooperative activation expecting the other app to yield first **[D]**. You chose the one call over a URL-scheme round trip and over accepting the behavior (D19), and the bare call changed nothing **[O]** (your second check). A probe from inside the app, with a Finder window put in front, then measured the routes (D.6): `NSApplication.activate()` was declined in every cycle, as was the deprecated `activate(ignoringOtherApps: true)`; `makeKeyAndOrderFront` moved the window to second place, behind the active app's key window — the method's documentation says a window *"can't be moved in front of the key window unless it and the key window are in the same application"* **[D+O]**; `orderFrontRegardless()` put the window on top with the app still inactive **[D+O]**; and `NSRunningApplication.current.activate(from: frontmost, options: [])` returned `true` and activated the app in every cycle, three in one process, making the window key with no window call at all **[O]**. That form is the *"context"* the macOS 14 release notes say an app may give an activation request *"in cases where a more deterministic result is desired"* **[D]**; they promise nothing beyond a yield, and the frontmost app here yields nothing, so the grant was observed, not guaranteed. The Launch Services route, opening the app's own bundle, was also tried and was confounded: it activated the other instance of the same bundle that was running from Xcode. The re-check from the menu then showed the grant was Finder's doing, not the form's: the cooperative request works with a Finder window in front and with no other app's, Xcode's included **[O]** (your third check, D.6). The probe had used Finder as its only rival, so its 3-for-3 measured a special case. At that point you called the behavior tertiary and had both AppKit forms rolled back; version 1 documents the limitation instead (D19, §8), and the measurements stay here for whoever returns to it. Routes not tried: a URL scheme opened through Launch Services, which activates the handling app the way the Dock does; `orderFrontRegardless()`, which puts the window on top without activating the app.
+**What the extra shows.** In version 1, the `cpu` symbol; since 2026-09-24 the live graph, whose reasoning is B.18. Then as now, a menu of *Show CPULoadMeter* and *Settings…*. There is no *Quit*: SwiftUI has no terminate action **[R]**, and this is a regular app whose application menu and Dock icon already offer Quit. If the app ever becomes menu-bar-only, a Quit item becomes necessary, and it is the one AppKit call worth making. Whether a window opened from the extra's menu comes forward while another app is active is P9; if it does not, activation is an AppKit call, and that would be the moment to weigh the pure-SwiftUI principle against the behavior. It did not **[O]** (your check, D.6), and the moment came. SwiftUI has no such action: its environment's actions are `dismiss`, `dismissWindow`, `newDocument`, `openDocument`, `openSettings`, `openWindow`, `pushWindow`, `refresh`, `rename`, and `resetFocus` **[O]** (the SDK's interface, D.6), and `OpenWindowAction`'s page promises only to bring a window to the front **[D]**. `NSApplication.activate()` is documented as a request that *"doesn't guarantee app activation"*, with cooperative activation expecting the other app to yield first **[D]**. You chose the one call over a URL-scheme round trip and over accepting the behavior (D19), and the bare call changed nothing **[O]** (your second check). A probe from inside the app, with a Finder window put in front, then measured the routes (D.6): `NSApplication.activate()` was declined in every cycle, as was the deprecated `activate(ignoringOtherApps: true)`; `makeKeyAndOrderFront` moved the window to second place, behind the active app's key window — the method's documentation says a window *"can't be moved in front of the key window unless it and the key window are in the same application"* **[D+O]**; `orderFrontRegardless()` put the window on top with the app still inactive **[D+O]**; and `NSRunningApplication.current.activate(from: frontmost, options: [])` returned `true` and activated the app in every cycle, three in one process, making the window key with no window call at all **[O]**. That form is the *"context"* the macOS 14 release notes say an app may give an activation request *"in cases where a more deterministic result is desired"* **[D]**; they promise nothing beyond a yield, and the frontmost app here yields nothing, so the grant was observed, not guaranteed. The Launch Services route, opening the app's own bundle, was also tried and was confounded: it activated the other instance of the same bundle that was running from Xcode. The re-check from the menu then showed the grant was Finder's doing, not the form's: the cooperative request works with a Finder window in front and with no other app's, Xcode's included **[O]** (your third check, D.6). The probe had used Finder as its only rival, so its 3-for-3 measured a special case. At that point you called the behavior tertiary and had both AppKit forms rolled back; version 1 documents the limitation instead (D19, §8), and the measurements stay here for whoever returns to it. Routes not tried: a URL scheme opened through Launch Services, which activates the handling app the way the Dock does; `orderFrontRegardless()`, which puts the window on top without activating the app.
 
 **The user removing the extra.** Version 1 binds no `isInserted`, so I believed the extra could not be removed **[R]**. That was wrong: you command-dragged it out **[O]** (D.6), and the documentation both allows it and names the consequence — *"An app that only shows in the menu bar will be automatically terminated if the user removes the extra from the menu bar"* **[D+O]**, which is what happened with the window closed. SwiftUI exposes no way to forbid the removal; the only handle is the `isInserted` binding, documented as set to `false` on removal and as showing the item when set to `true` **[D]**, so a binding forced back to `true` could re-insert it — though whether the termination comes first is unobserved. You chose to accept the removal and document it (D20). If a "show in menu bar" setting is ever added, then with the extra hidden, closing the window quits the app again **[O]** (variant I) — which is arguably correct, since no UI would remain.
 
@@ -755,7 +787,7 @@ The loose spec wanted the header to say how many cores of each type the machine 
 
 **One step is one sample, not one second.** After the period changes from 1 s to 30 s, the history holds steps of both kinds with no visible boundary. The alternatives were to clear the history on a change, which loses what you were looking at each time you touch the control, or to insert a marker step, which adds a second kind of entry to the history model. You chose to keep the mixed history; this is presumably how the original behaved.
 
-**Sampling was continuous** in version 1 as first specified, by implication: a menu bar graph with no windows open requires it. With the window the only graph, you had it confined to the time the window is shown (D23, 2026-09-24): a history nobody sees costs samples and redraws for nothing, and a window reopened after hours with a graph full of history it never showed is odder than one that starts fresh. The live menu-bar graph will need sampling of its own, and revisits this. App Nap may throttle timers **[R]**; because a load is a delta over whatever interval actually elapsed, late samples are still correct, merely sparser. The reason is structural, and `top` relies on it too: the denominator is *ticks*, not wall-clock time, so a late timer changes which interval is averaged but cannot bias the ratio. `top` timestamps its samples only because its per-*process* figure divides by wall time (`cpu.c:74–81`); its machine-wide line needs no clock at all **[S]** (C.2).
+**Sampling was continuous** in version 1 as first specified, by implication: a menu bar graph with no windows open requires it. With the window the only graph, you had it confined to the time the window is shown (D23, 2026-09-24): a history nobody sees costs samples and redraws for nothing, and a window reopened after hours with a graph full of history it never showed is odder than one that starts fresh. The menu bar graph has sampling of its own (D25): a second monitor with its own period, resumed when the label appears and never suspended, since the item is always in the menu bar; so with no window open the app samples once more, for a graph that is always seen. App Nap may throttle timers **[R]**; because a load is a delta over whatever interval actually elapsed, late samples are still correct, merely sparser. The reason is structural, and `top` relies on it too: the denominator is *ticks*, not wall-clock time, so a late timer changes which interval is averaged but cannot bias the ratio. `top` timestamps its samples only because its per-*process* figure divides by wall time (`cpu.c:74–81`); its machine-wide line needs no clock at all **[S]** (C.2).
 
 **`Task` and `Clock`, rather than `Timer`.** Both are first-party; the task's cancellation is structural, and it has no run-loop-mode behavior to reason about. A default-mode `Timer` pauses during live resize and menu tracking **[R]** — precisely when you are watching the graph. P6 checks that the task-based loop does not share that problem, and what the cadence looks like with the window closed. `top`'s loop is the same shape — sleep, shift current to previous, read (`libtop.c:467–469`) **[S]**. The sample itself is one Mach call plus a few hundred integer operations, which is why it starts on the main actor.
 
@@ -865,6 +897,25 @@ The last is cheap and buys the most, so it is the design. The deadline rule move
 **Isolation.** `nonisolated` on a struct, class, or enum declaration is SE-0449, implemented in Swift 6.1 **[D]**. `onGeometryChange`'s transform closure is `@Sendable` **[D]**, which is why `LoadView.stepLength` is `nonisolated`: a `View` is main-actor-isolated through the protocol, and its static constant with it. Under the `MainActor` default the App target first had, every core declaration needed the keyword, and the Tests target's `nonisolated` default made a missed one a build error — a guard that D21 made moot by removing the default it guarded against.
 
 **The host port.** Each call to `mach_host_self()` adds a user reference to the task's name for the host port **[R]**; `top` stores the port and reuses it (`libtop_port`, used at `libtop.c:712`) **[S]**. The reader does likewise.
+
+### B.18 The menu bar graph
+
+**What you asked for** (2026-09-24). Every core's graph side by side with a divider between, the first core leftmost; the width of each and the sampling period set by two settings — the period through the same control as the header's, with the same presets, rules, and default; the history length 30 to 120 s with presets 30, 60, 90, and 120 and a default of 60 — the width being the history length divided by the period, in whole seconds, partial results rounded down; and the colors following Apple's guidelines and the system theme. Four questions were put to you before any work: one point per step or narrower (one point, as the window, at some 1,460 pt for 24 cores); whether the extra samples on the window's monitor or its own (its own); where the two settings live (the settings window); and whether the graph replaces the symbol or joins it (replaces). D24–D27.
+
+**P10, the mechanism.** Apple's `MenuBarExtra.init(content:label:)` says of the label only that it is *"A `View` to use as the label in the system menu bar"* **[D]**, and the `MenuBarExtra` overview says nothing about how a label is drawn **[D, by omission]**. A probe build put three labels in the extra in turn and, from inside the process, listed the status item's window and button once a second (all **[O]**, D.6). With a `Canvas` as the label, whose body an observed counter re-evaluated once a second, the canvas's drawing closure never ran and the `NSStatusBarButton` had no image, the item 16 pt wide. With an `Image(decorative:scale:)` made by `ImageRenderer` from the same canvas, the button's image was 120 × 18 pt, the item 136, and the image object was a new one after every re-evaluation. With `.renderingMode(.template)` added, the button's image reported `isTemplate` true. So SwiftUI realizes the label as the button's image; an `Image` is the label that works; and the design renders the graph to an image on every sample (D24). The second fallback, an `NSStatusItem`, was not needed, and the pure-SwiftUI principle holds.
+
+**Template, for the colors.** The Human Interface Guidelines on menu bar extras: *"Both interface icons and symbols use black and clear colors to define their shapes; the system can apply other colors to the black areas in each image so it looks good on both dark and light menu bars, and when your menu bar extra is selected."* **[D]** And `NSImage.isTemplate`: template images *"should consist of only black and clear colors. You can use the alpha channel in the image to adjust the opacity of black content"* **[D]**. That is "follow Apple's guidelines and the system theme" exactly, with no `colorScheme` check and no semantic color of this app's choosing: the graph is drawn in opaque black, the dividers in black at 40% opacity — the alpha channel being a template's only way of saying "secondary" — and the system colors the result. The window's graph draws in the label color instead, because a window's content is not tinted for it (§2.13). What the tinted item looks like is the hand check (P15); the button's `isTemplate` is what was observed.
+
+**The item's width.** At 24 CPUs and the defaults the image is 1,563 pt wide and the item 1,579 **[O]** (1,463 and 1,479 before the dividers were widened), about half of a 3,072-pt display's menu bar. You chose one point per step knowing that (D27); a narrower step, or a cap on the width, stays available (§8).
+
+**The dividers.** The first build drew a 1 pt divider at 40% flush against the graphs on both sides, and you found it read as one more sample: a solid silhouette of 1 pt lines absorbs a 1 pt line of any shade. You asked for dividers more distinct from the graph, a point of clear space between a divider and the graph "enough to be just barely visible", and endcaps at both ends drawn like the dividers so that the item's whole extent is drawn, and offered to pick from a build that drew each divider differently. The sampler cycled eight styles through the 25 slots, every one with the 1 pt gap: 1 pt at 40%; 1 pt opaque; 2 pt at 40%; 2 pt opaque; 3 pt at 25%; 1 pt opaque at half height; 2 pt at 60%; and 1 pt opaque dashed. You chose the widest and faintest, 3 pt at 25% **[O]** (your pick, D.6): wide enough that no sample can be mistaken for it, faint enough not to compete with the plot. In a template image width, alpha, and shape are the only levers there are, and this uses the first two.
+**Its own monitor** (D25). The window's monitor samples only while the window is shown (D23), and its period and step count are the window's. Sharing it would tie the menu bar's width to the window's period and its life to the window's. A second `LoadMonitor` costs nothing new: the class was already handed its period and step count and told when to run, and it gained only a name for the diagnostics. It is resumed when the label first appears, which was observed at launch (D.6), and never suspended: the item is always in the menu bar, and the app quits if the user removes it with no window showing (D20).
+
+**The rounding.** The width is the history length over the period in whole steps, rounded down as you asked; at 30 s of history and a 60 s period that is zero, and a zero-width graph is an item of dividers and nothing else, so the design adds a floor of one step (A.2). At one step the graph shows the newest load only.
+
+**One control for three settings.** The header's `PeriodControl` was specific to `SamplingPeriod`. "The same control with the same rules" for two more settings is one generic control, `SecondsControl<Value: WholeSeconds>`, over a protocol of the three things it touches — the seconds, the presets, and the parse from text — so that a second copy could not drift from the first, and the compiler holds the two types to the same contract.
+
+**The cost** (P16). Rendering a 1,463 × 16 pt image at 2x once a second costs the app 1.5 to 1.6% of a core with the window closed, where it cost 0.0 at rest before **[O]** (D.6). `ImageRenderer` is the whole of it: there is no view hierarchy to lay out, one canvas and one image. It is of the order of the window's own graph (D22) and accepted.
 
 ## Appendix C — Prior art: how `top`, `ps`, and the kernel answer these questions
 
@@ -1343,6 +1394,11 @@ The §7 checks as they were run, with what was seen. Conditions unless stated: t
 | The monitor's compile checks | Three answered by the compiler, 2026-09-22. | `didSet` on an `@Observable` stored property compiles and runs. A nonisolated typed-throws function converts to the `@MainActor` reader type as a default argument. A plain `deinit` cannot cancel the loop — "main actor-isolated property 'loop' can not be referenced from a nonisolated context" — and `isolated deinit` (SE-0371) can. |
 | The test bundle links core code the app does not use | Observation from PR 2, 2026-09-22. | The plan had flagged undefined symbols as a risk once the test bundle referenced core types nothing in the app calls, with a Debug-only `DEAD_CODE_STRIPPING = NO` as the fallback. It did not arise: all six core types and their 34 tests link and run against the unchanged settings, so no divergence was recorded. |
 | The extra, seen from inside | Observation, not a check. | `CGWindowListCopyWindowInfo` from another process shows no status item this project can interpret. A disposable hosted test importing AppKit listed `NSApplication.shared.windows`: an `NSStatusBarWindow`, visible, level 25, 32×30 at the top-right of a 3200-wide screen, and the Window menu holding `CPULoadMeter`. |
+| **P10** the label's mechanism | **Answered by probe, 2026-09-24.** | A Release probe build with the extra's label replaced in turn, an observed counter re-evaluating it once a second, and, from inside the process, `NSApplication.windows` filtered to the `NSStatusBarWindow` and its content walked once a second. `Canvas` label: `label body evaluated` logged every second, `canvas drew` never, `NSStatusBarButton 16.0x22.0 image=nil`. `Image(decorative:scale:)` from an `ImageRenderer` of the same canvas at scale 2: `canvas drew … 120.0x18.0`, `rendered image 240x36`, `NSStatusBarButton 136.0x22.0 image=120.0x18.0 template=false`, and the image's `ObjectIdentifier` different on every tick. With `.renderingMode(.template)`: `template=true`. `CGWindowListCopyWindowInfo` from another process listed nothing for this or any app, and `screencapture` refused, so the shell never saw the item; P15 does. |
+| The label as shipped, from inside | Observation, 2026-09-24. | A disposable hosted test after three seconds: `NSStatusBarWindow 1479.0x30.0`, `NSStatusBarButton 1479.0x22.0`, `image 1463.0x16.0 template=true`, one representation of 2926 × 32 pixels. |
+| **P15**, first build | **Held but for the dividers.** You. | The technical side worked as expected; the 1 pt dividers at 40% looked like parts of the graph. |
+| The divider sampler | Your pick, 2026-09-24. | A scratch Release build drew every divider slot, the endcaps included, in a different style, cycling eight through the 25 slots with a 1 pt gap either side: A 1 pt 40%, B 1 pt opaque, C 2 pt 40%, D 2 pt opaque, E 3 pt 25%, F 1 pt opaque half height, G 2 pt 60%, H 1 pt opaque dashed 2 on 2 off. You chose E, "the one that is wider and lighter". Shipped: 3 pt at 25%, 1 pt gaps, endcaps the same; the image 1,563 × 16 pt for 24 CPUs at 60 steps. |
+| **P16** the label's cost | **Measured**; accepted. | Release, window closed, 24 CPUs, 60 steps, 1 s period, `top -l 33 -s 1 -pid`, medians of 30 samples: 1.5, 1.5, 1.6% of a core over three runs, maxima 2.5 to 3.1 with one 16.5 outlier; `main` at rest in the same session, 0.0 (a second control run read 4.75 with a 17.4 maximum and is taken as noise). The menu bar monitor's log: 36 samples in 36 s, intervals 0.938–1.062 s, lateness median 53 ms, a sample 0.22–0.33 ms; the window's monitor took none. |
 
 ## Appendix E — Evidence
 
@@ -1411,3 +1467,7 @@ Conditions for every **[O]**: Mac with Apple M2 Ultra (24 CPUs), macOS 27.0, Xco
 | `nonisolated` on type declarations | Swift Evolution SE-0449, "Allow `nonisolated` to prevent global actor inference", implemented in Swift 6.1. It does not discuss the default-isolation build setting. |
 | Tools for the pixel tests and the cost check | `xcrun --find xcresulttool` and `xctrace` both resolve in Xcode 27.0; `xcresulttool export` lists an `attachments` subcommand; `xctrace list templates` includes Time Profiler and SwiftUI. |
 | The repository's merge settings | `gh api repos/coreaudio-fan/CPULoadMeter`: squash merges titled by the PR with the commit messages as the body; branches deleted on merge. Identical to SourceTools'. |
+| `MenuBarExtra.init(content:label:)`: the label parameter | Apple, `MenuBarExtra.init(content:label:)`: *"A `View` to use as the label in the system menu bar."* The `MenuBarExtra` overview says nothing about how a label is drawn. |
+| Menu bar extras use black and clear; the system colors them; the menu bar is 24 pt | Apple, *Human Interface Guidelines*, *The menu bar*, "Menu bar extras": the sentence quoted in B.18, and *"The menu bar's height is 24 pt."* |
+| Template images | Apple, `NSImage.isTemplate`: the sentences quoted in B.18. Apple, `Image.renderingMode(_:)`: template mode *"renders all non-transparent pixels as the foreground color."* |
+| What SwiftUI makes of a label | Observed 2026-09-24, D.6 (P10); I found no documentation. |
