@@ -11,6 +11,14 @@ enum DefaultsKey {
 	///	default.
 	static let samplingPeriodSeconds = "samplingPeriodSeconds"
 
+	///	The menu bar graph's sampling period in whole seconds. An `Int`, 1 when absent; a stored value out of range
+	///	falls back to the default.
+	static let menuBarPeriodSeconds = "menuBarPeriodSeconds"
+
+	///	The menu bar graph's history length in whole seconds. An `Int`, 60 when absent; a stored value out of range
+	///	falls back to the default.
+	static let menuBarHistorySeconds = "menuBarHistorySeconds"
+
 	///	The main window's last width in points. A `Double`, absent until the window has been shown.
 	static let mainWindowWidth = "mainWindowWidth"
 

@@ -3,8 +3,8 @@ import SwiftUI
 ///	A whole-seconds control: a narrow text field with a menu of presets beside it, a combo box composed in SwiftUI,
 ///	which has none. The field shows a draft of the user's typing until it commits, on Return or when the field loses
 ///	focus; a preset sets the value directly. Switching to another window or app is not a focus loss, here as in every
-///	Mac app: the draft waits. One control serves the window's period and the menu bar's period and history length,
-///	which differ only in their type's range and presets. Design.md, sections 2.11, 2.12, and 5.9; the reasoning in B.2.
+///	Mac app: the draft waits. One control serves the window's period and the menu bar's period and history length, which
+///	differ only in their type's range and presets. Design.md, sections 2.11, 2.12, and 5.9; the reasoning in B.2.
 struct SecondsControl<Value: WholeSeconds>: View {
 
 	///	The words before the field: "Update every".

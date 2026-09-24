@@ -18,30 +18,31 @@ enum Diagnostics {
 		logger.debug("Launched on \(processorName ?? "an unnamed processor", privacy: .public) with \(cpuCount) CPUs")
 	}
 
-	///	Written once per sample, with numbers only: the sample's index; how late it was and how long it took, in
-	///	milliseconds; the CPU count; and the machine-wide user, system, and idle tick deltas, which are what `top` is
-	///	checked against. A sample that was a baseline only, the CPU count having changed, has no deltas and says so.
-	static func logSample(index: Int, lateness: Duration, duration: Duration, cpuCount: Int, delta: TickDelta?) {
+	///	Written once per sample, with numbers only after the monitor's name: the sample's index; how late it was and how
+	///	long it took, in milliseconds; the CPU count; and the machine-wide user, system, and idle tick deltas, which are
+	///	what `top` is checked against. A sample that was a baseline only, the CPU count having changed, has no deltas
+	///	and says so. The name in brackets tells the two monitors' samples apart.
+	static func logSample(monitor: String, index: Int, lateness: Duration, duration: Duration, cpuCount: Int, delta: TickDelta?) {
 		let late = milliseconds(lateness)
 		let took = milliseconds(duration)
 		if let delta {
-			logger.debug("Sample \(index): late \(late, format: .fixed(precision: 1)) ms, took \(took, format: .fixed(precision: 3)) ms, \(cpuCount) CPUs, ticks user \(delta.user) system \(delta.system) idle \(delta.idle)")
+			logger.debug("[\(monitor, privacy: .public)] Sample \(index): late \(late, format: .fixed(precision: 1)) ms, took \(took, format: .fixed(precision: 3)) ms, \(cpuCount) CPUs, ticks user \(delta.user) system \(delta.system) idle \(delta.idle)")
 		} else {
-			logger.debug("Sample \(index): late \(late, format: .fixed(precision: 1)) ms, took \(took, format: .fixed(precision: 3)) ms, \(cpuCount) CPUs, baseline")
+			logger.debug("[\(monitor, privacy: .public)] Sample \(index): late \(late, format: .fixed(precision: 1)) ms, took \(took, format: .fixed(precision: 3)) ms, \(cpuCount) CPUs, baseline")
 		}
 	}
 
-	///	Written whenever the step count changes.
-	static func logStepCount(_ stepCount: Int) {
-		logger.debug("Step count \(stepCount)")
+	///	Written whenever a monitor's step count changes.
+	static func logStepCount(monitor: String, _ stepCount: Int) {
+		logger.debug("[\(monitor, privacy: .public)] Step count \(stepCount)")
 	}
 
-	///	Written when sampling starts, with the CPU count and the step count, and when it stops.
-	static func logSampling(isStarting: Bool, cpuCount: Int, stepCount: Int) {
+	///	Written when a monitor's sampling starts, with the CPU count and the step count, and when it stops.
+	static func logSampling(monitor: String, isStarting: Bool, cpuCount: Int, stepCount: Int) {
 		if isStarting {
-			logger.debug("Sampling started: \(cpuCount) CPUs, step count \(stepCount)")
+			logger.debug("[\(monitor, privacy: .public)] Sampling started: \(cpuCount) CPUs, step count \(stepCount)")
 		} else {
-			logger.debug("Sampling stopped; history dropped at step count \(stepCount)")
+			logger.debug("[\(monitor, privacy: .public)] Sampling stopped; history dropped at step count \(stepCount)")
 		}
 	}
 

@@ -24,23 +24,31 @@ struct CPULoadMeterApp: App {
 	///	The main window's last height, kept with its partner.
 	@AppStorage(DefaultsKey.mainWindowHeight) private var mainWindowHeight: Double?
 
-	///	The sampler, owned here so that its lifetime is the process's, not a window's. Nothing in this body reads its
-	///	state: a scene body that observed it would be re-evaluated on every sample, and the menus rebuilt with it
-	///	(`MainWindowContent`).
+	///	The window's sampler, owned here so that its lifetime is the process's, not a window's. Nothing in this body
+	///	reads its state: a scene body that observed it would be re-evaluated on every sample, and the menus rebuilt with
+	///	it (`MainWindowContent`).
 	@State private var monitor: LoadMonitor
+
+	///	The menu bar's sampler, with its own period and its own history, read only by the extra's label
+	///	(`MenuBarGraphLabel`).
+	@State private var menuBarMonitor: LoadMonitor
 
 	///	The processor's name, read once at launch; `nil` if the kernel would not say.
 	private let processorName: String?
 
-	///	Reads the processor's name and the CPU count, creates the monitor from the stored period and the stored window
-	///	width, and writes the launch diagnostic. The monitor samples only while the window is shown, so the launch
-	///	line's CPU count is a read of its own. The defaults are read here directly because the property wrappers above
-	///	are not usable before the app exists; they read the same store.
+	///	Reads the processor's name and the CPU count, creates the window's monitor from the stored period and the stored
+	///	window width and the menu bar's from its stored period and history length, and writes the launch diagnostic.
+	///	Neither monitor samples until its view appears, so the launch line's CPU count is a read of its own. The
+	///	defaults are read here directly because the property wrappers above are not usable before the app exists; they
+	///	read the same store.
 	init() {
 		let defaults = UserDefaults.standard
 		let storedPeriod = (defaults.object(forKey: DefaultsKey.samplingPeriodSeconds) as? Int).flatMap(SamplingPeriod.init(seconds:))
 		let storedWidth = (defaults.object(forKey: DefaultsKey.mainWindowWidth) as? Double).map { CGFloat($0) }
-		_monitor = State(initialValue: LoadMonitor(period: storedPeriod ?? .default, stepCount: LoadGraph.stepCount(forWidth: storedWidth ?? MainView.idealWidth)))
+		let menuBarPeriod = (defaults.object(forKey: DefaultsKey.menuBarPeriodSeconds) as? Int).flatMap(SamplingPeriod.init(seconds:)) ?? .default
+		let menuBarHistory = (defaults.object(forKey: DefaultsKey.menuBarHistorySeconds) as? Int).flatMap(HistoryLength.init(seconds:)) ?? .default
+		_monitor = State(initialValue: LoadMonitor(name: "window", period: storedPeriod ?? .default, stepCount: LoadGraph.stepCount(forWidth: storedWidth ?? MainView.idealWidth)))
+		_menuBarMonitor = State(initialValue: LoadMonitor(name: "menu bar", period: menuBarPeriod, stepCount: menuBarHistory.stepCount(at: menuBarPeriod)))
 		processorName = readProcessorName()
 		Diagnostics.logLaunch(processorName: processorName, cpuCount: (try? readProcessorTicks())?.count ?? 0)
 	}
@@ -93,11 +101,12 @@ struct CPULoadMeterApp: App {
 			SettingsView()
 		}
 
-		//	The extra receives the monitor now, unused, so that the later live graph is a change to one view rather than
-		//	to the app's wiring (Design.md, section 5.1).
-		MenuBarExtra("CPULoadMeter", systemImage: "cpu") {
+		//	The extra's label is the live graph, drawn from the menu bar's own monitor; its menu is unchanged. The label
+		//	reads the monitor, this body does not (Design.md, sections 5.1 and 5.2).
+		MenuBarExtra {
 			MenuBarExtraMenu()
-				.environment(monitor)
+		} label: {
+			MenuBarGraphLabel(monitor: menuBarMonitor)
 		}
 	}
 
