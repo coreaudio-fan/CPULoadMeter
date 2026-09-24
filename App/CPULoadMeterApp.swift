@@ -32,17 +32,17 @@ struct CPULoadMeterApp: App {
 	///	The processor's name, read once at launch; `nil` if the kernel would not say.
 	private let processorName: String?
 
-	///	Reads the processor's name, creates the monitor from the stored period and the stored window width, and writes
-	///	the launch diagnostic. The defaults are read here directly because the property wrappers above are not usable
-	///	before the app exists; they read the same store.
+	///	Reads the processor's name and the CPU count, creates the monitor from the stored period and the stored window
+	///	width, and writes the launch diagnostic. The monitor samples only while the window is shown, so the launch
+	///	line's CPU count is a read of its own. The defaults are read here directly because the property wrappers above
+	///	are not usable before the app exists; they read the same store.
 	init() {
 		let defaults = UserDefaults.standard
 		let storedPeriod = (defaults.object(forKey: DefaultsKey.samplingPeriodSeconds) as? Int).flatMap(SamplingPeriod.init(seconds:))
 		let storedWidth = (defaults.object(forKey: DefaultsKey.mainWindowWidth) as? Double).map { CGFloat($0) }
-		let monitor = LoadMonitor(period: storedPeriod ?? .default, stepCount: LoadGraph.stepCount(forWidth: storedWidth ?? MainView.idealWidth))
-		_monitor = State(initialValue: monitor)
+		_monitor = State(initialValue: LoadMonitor(period: storedPeriod ?? .default, stepCount: LoadGraph.stepCount(forWidth: storedWidth ?? MainView.idealWidth)))
 		processorName = readProcessorName()
-		Diagnostics.logLaunch(processorName: processorName, cpuCount: monitor.state.histories.count)
+		Diagnostics.logLaunch(processorName: processorName, cpuCount: (try? readProcessorTicks())?.count ?? 0)
 	}
 
 	///	The stored window size when both halves are present, and `nil` otherwise.

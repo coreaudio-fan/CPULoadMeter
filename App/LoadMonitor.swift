@@ -16,12 +16,18 @@ import Observation
 	///	Sleeps until an instant on the continuous clock, or throws once the sleeping task is cancelled.
 	typealias Sleep = @MainActor (ContinuousClock.Instant) async throws -> Void
 
-	///	The sampling period. Setting it restarts the loop: the next sample is one new period away.
+	///	The sampling period. Setting it while sampling restarts the loop: the next sample is one new period away.
 	var period: SamplingPeriod {
 		didSet {
-			restart()
+			if isSampling {
+				restart()
+			}
 		}
 	}
+
+	///	Whether the loop is running. It runs only while the main window is shown: the window's root view resumes the
+	///	monitor when it appears and suspends it when it disappears, and a suspended monitor holds no history.
+	private(set) var isSampling = false
 
 	///	Everything sampled so far.
 	private(set) var state: MonitorState
@@ -41,14 +47,38 @@ import Observation
 	///	How many samples the loop has taken; the baseline is not counted.
 	private var sampleIndex = 0
 
-	///	Takes the baseline sample at once, synchronously, and starts the loop.
+	///	Makes a monitor that is not yet sampling: no history, no baseline, no loop until `resume()`.
 	init(period: SamplingPeriod, stepCount: Int, readTicks: @escaping TickReader = readProcessorTicks, sleep: @escaping Sleep = { try await Task.sleep(until: $0, clock: .continuous) }) {
 		self.period = period
 		self.readTicks = readTicks
 		self.sleep = sleep
 		state = MonitorState(stepCount: stepCount)
+	}
+
+	///	Starts sampling as the app starts: the history zeroed at the current step count, a baseline sample taken at
+	///	once, synchronously, and the loop started so that the first load is one period away. Resuming while sampling
+	///	starts over the same way.
+	func resume() {
+		state = MonitorState(stepCount: state.stepCount)
+		lastError = nil
 		sample()
+		isSampling = true
 		restart()
+		Diagnostics.logSampling(isStarting: true, cpuCount: state.histories.count, stepCount: state.stepCount)
+	}
+
+	///	Stops sampling and drops the history: with no window to show it there is nothing to keep, and the next
+	///	`resume()` starts fresh. The step count is kept, since it is the window's width. Suspending while suspended does
+	///	nothing.
+	func suspend() {
+		if isSampling {
+			loop?.cancel()
+			loop = nil
+			isSampling = false
+			state = MonitorState(stepCount: state.stepCount)
+			lastError = nil
+			Diagnostics.logSampling(isStarting: false, cpuCount: 0, stepCount: state.stepCount)
+		}
 	}
 
 	///	Ends the loop with the monitor. The deinit is isolated because `loop` is; the app never destroys its monitor,
@@ -90,7 +120,9 @@ import Observation
 				} catch {
 					break
 				}
-				guard let self else {
+				//	A cancellation can land after the sleep has ended and before this iteration runs, since both queue
+				//	on the main actor; without this check a suspended monitor would take one more sample.
+				guard let self, !Task.isCancelled else {
 					break
 				}
 				let woke = ContinuousClock.now

@@ -23,6 +23,16 @@ struct MainWindowContent: View {
 			.onChange(of: monitor.period) {
 				samplingPeriodSeconds = monitor.period.seconds
 			}
+
+			//	Sampling runs only while the window is shown. Closing the window hides it rather than destroying it, and
+			//	this content disappears with it (Design.md, D23 and D.6); on reappearing, the monitor starts over from a
+			//	fresh baseline, as at launch.
+			.onAppear {
+				monitor.resume()
+			}
+			.onDisappear {
+				monitor.suspend()
+			}
 	}
 
 }
