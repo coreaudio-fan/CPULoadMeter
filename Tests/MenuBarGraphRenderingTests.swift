@@ -32,34 +32,40 @@ struct MenuBarGraphRenderingTests {
 		case clear
 	}
 
+	///	The layout, from the left: a divider, a gap, the graph, a gap, and so on, ending with a divider.
 	private func expectation(column: Int, row: Int, graphs: [[UInt32]]) -> Expectation {
 		let stepCount = graphs[0].count
-		let stride = stepCount + Int(MenuBarGraph.dividerWidth)
-		let graphIndex = column / stride
-		let offset = column % stride
+		let divider = Int(MenuBarGraph.dividerWidth)
+		let gap = Int(MenuBarGraph.gap)
+		let pitch = divider + gap + stepCount + gap
+		let graphIndex = column / pitch
+		let offset = column % pitch
 		let result: Expectation
-		if offset == stepCount {
+		if offset < divider {
 			result = .divider
+		} else if offset < (divider + gap) || offset >= (divider + gap + stepCount) || graphIndex >= graphs.count {
+			result = .clear
 		} else {
-			let step = stepCount - 1 - offset
+			let step = stepCount - 1 - (offset - divider - gap)
 			let lineHeight = Int(graphs[graphIndex][step])
 			result = row >= (Int(MenuBarGraph.height) - lineHeight) ? .line : .clear
 		}
 		return result
 	}
 
-	//	Two CPUs, four steps each: CPU 0's graph in columns 0 to 3, the divider in column 4, CPU 1's in 5 to 8. The
-	//	loads are asymmetric so that a mirrored layout, or the CPUs swapped, cannot match; every line is three pixels or
-	//	taller, which the renderer draws faithfully.
-	@Test func theGraphsSitSideBySideFirstCPULeftmostWithADividerBetween() async throws {
+	//	Two CPUs, four steps each, at 3 pt dividers and 1 pt gaps: the left endcap in columns 0 to 2, a gap, CPU 0's
+	//	graph in 4 to 7, a gap, the divider in 9 to 11, a gap, CPU 1's in 13 to 16, a gap, the right endcap in 18 to 20.
+	//	The loads are asymmetric so that a mirrored layout, or the CPUs swapped, cannot match; every line is three
+	//	pixels or taller, which the renderer draws faithfully.
+	@Test func theGraphsSitSideBySideFirstCPULeftmostWithDividersAndEndcaps() async throws {
 		let graphs: [[UInt32]] = [[16, 8, 6, 12], [12, 16, 0, 8]]
 		let grid = try grid(graphs)
-		let plot = grid.alpha(column: 3, row: 8)
-		let divider = grid.alpha(column: 4, row: 8)
+		let plot = grid.alpha(column: 7, row: 8)
+		let divider = grid.alpha(column: 9, row: 8)
 		try #require(plot > 0, "the full-height line drew nothing")
 		Attachment.record(try #require(grid.png), named: "menubar-two-cpus.png")
 
-		#expect(grid.width == 9)
+		#expect(grid.width == 21)
 		#expect(grid.height == 16)
 		#expect(divider > 0 && divider < plot, "the divider is fainter than the plot")
 		for row in 0..<grid.height {
@@ -74,19 +80,25 @@ struct MenuBarGraphRenderingTests {
 		}
 	}
 
-	@Test func oneCPUHasNoDivider() async throws {
+	//	One CPU still has both endcaps, and a point clear on each side of its graph.
+	@Test func oneCPUHasTwoEndcapsAndItsGaps() async throws {
 		let grid = try grid([[16, 16, 16]])
+		let endcap = grid.alpha(column: 0, row: 8)
 
-		#expect(grid.width == 3)
-		for column in 0..<grid.width {
-			#expect(grid.alpha(column: column, row: 0) == grid.alpha(column: 0, row: 0))
-		}
+		#expect(grid.width == 11)
+		#expect(endcap > 0)
+		#expect(grid.alpha(column: 2, row: 8) == endcap)
+		#expect(grid.alpha(column: 3, row: 8) == 0)
+		#expect(grid.alpha(column: 4, row: 8) > endcap)
+		#expect(grid.alpha(column: 7, row: 8) == 0)
+		#expect(grid.alpha(column: 8, row: 8) == endcap)
+		#expect(grid.alpha(column: 10, row: 8) == endcap)
 	}
 
-	@Test func theWidthIsEveryStepAndADividerBetweenNeighbors() async throws {
-		#expect(MenuBarGraph.width(cpuCount: 24, stepCount: 60) == 1_463)
-		#expect(MenuBarGraph.width(cpuCount: 1, stepCount: 60) == 60)
-		#expect(MenuBarGraph.width(cpuCount: 0, stepCount: 60) == 0)
+	@Test func theWidthIsEveryStepWithADividerAndGapsAroundEveryGraph() async throws {
+		#expect(MenuBarGraph.width(cpuCount: 24, stepCount: 60) == 1_563)
+		#expect(MenuBarGraph.width(cpuCount: 1, stepCount: 60) == 68)
+		#expect(MenuBarGraph.width(cpuCount: 0, stepCount: 60) == 3)
 	}
 
 }
