@@ -92,7 +92,7 @@ The header says nothing about core kinds.
 - Below the header, one LoadView per CPU fills the rest of the window.
 - They stack top to bottom in the order the kernel reports the CPUs, which is CPU-ID order: the top view is CPU 0.
 - They share the available height equally, and each spans the full width.
-- They carry no labels. Adjacent views are separated by a hairline.
+- They carry no labels. Adjacent LoadViews are separated by a hairline.
 
 *Rationale: B.6.*
 
@@ -339,14 +339,13 @@ With another app active, the button does not bring this app to the foreground (�
 MainView            VStack(spacing: 0)
 ├─ HeaderView         natural height (.fixedSize vertical), full width
 ├─ hairline
-└─ LoadStackView      VStack(spacing: 0), fills the remainder; reports its step count
-   ├─ LoadView          flexible; minHeight 8; nothing but the plot
-   ├─ hairline
-   ├─ LoadView
-   └─ …
+└─ LoadStackView      one Canvas, fills the remainder; one row per LoadView, minHeight 8 each; hairlines on the
+                      row boundaries; reports its step count
 ```
 
 There is no `ScrollView` anywhere. The window's minimum size emerges from the content's minimums through the default `contentMinSize` resizability. Equal division can land on fractional points, so adjacent LoadViews may differ in height by one pixel.
+
+**A LoadView is a row of one `Canvas`, not a view of its own** (D22). SwiftUI's cost is in laying out and compositing views, not in strokes: twenty-four canvases and twenty-three hairline views re-laid-out on every sample cost the app 1.5 to 1.6% of a core; one canvas costs 0.9 to 1.0%, and WindowServer's share could not be told from noise either way (D.6). The hairlines are drawn in the canvas on the row boundaries, one device pixel tall, over the graphs' top pixel row, so that every row keeps the same height. The per-CPU accessibility a canvas cannot carry is supplied through `accessibilityChildren`: one element per LoadView, labelled `CPU n` with the latest load as its value.
 
 ### 5.4 The header
 
@@ -356,25 +355,17 @@ The three whole percentages come from `UsagePercentages`, which rounds cumulativ
 
 *Rationale: B.5, B.17 (the rounding).*
 
-### 5.5 LoadView
+### 5.5 The drawing
 
-`LoadView` is a pure function of its input: it takes one CPU's `LoadHistory` as a plain value and draws it as one stroked path in a `Canvas`.
+The drawing is a pure function of its input: `LoadStackView` takes every CPU's `LoadHistory` as plain values and draws them as one stroked path in one `Canvas`, a row per LoadView. The rule for one row, `appendLines(of:to:in:lineWidth:)`, is the one the menu-bar graph will draw with:
 
 ```swift
-struct LoadView: View {
-	let history: LoadHistory
-	var lineWidth: CGFloat = 1
-
-	var body: some View {
-		Canvas { context, size in
-			let steps = history.loads.reversed().prefix(Int(size.width / LoadGraph.stepLength)).enumerated()
-			let path = steps.reduce(into: Path()) { path, step in
-				let x = size.width - (CGFloat(step.offset) * LoadGraph.stepLength) - (lineWidth / 2)
-				path.move(to: CGPoint(x: x, y: size.height))
-				path.addLine(to: CGPoint(x: x, y: size.height * (1 - step.element.total)))
-			}
-			context.stroke(path, with: .color(.primary), lineWidth: lineWidth)
-		}
+static func appendLines(of history: LoadHistory, to path: inout Path, in rect: CGRect, lineWidth: CGFloat) {
+	let steps = history.loads.reversed().prefix(LoadGraph.stepCount(forWidth: rect.width)).enumerated()
+	for step in steps {
+		let x = rect.maxX - (CGFloat(step.offset) * LoadGraph.stepLength) - (lineWidth / 2)
+		path.move(to: CGPoint(x: x, y: rect.maxY))
+		path.addLine(to: CGPoint(x: x, y: rect.maxY - (rect.height * step.element.total)))
 	}
 }
 ```
@@ -382,10 +373,10 @@ struct LoadView: View {
 The drawing rules:
 
 - **The walk starts at the bottom-right.** Step 0 is the newest load; each later step is one `stepLength` further left. `reversed()` puts the newest first, and `prefix` covers the frame or two during a live resize when the history has not yet caught up with the view.
-- **The y-axis points down.** The bottom edge is `y = size.height`, and a full-height line ends at `y = 0`.
+- **The y-axis points down.** The row's bottom edge is `rect.maxY`, and a full-height line ends at `rect.minY`.
 - **A line's center is a pixel boundary plus half the line width.** The right edge of step *k*'s line sits at `width − k × stepLength`, a whole point, and the center is half a line width to its left.
-- **One path and one stroke** per LoadView per redraw.
-- **`stepLength` is 1 pt. `lineWidth` defaults to 1 pt**, which tiles the steps into a solid silhouette; the default's final value is chosen by eye against the running app (§8). It is a parameter rather than a constant so that the rendering tests can exercise more than one width, and because the later menu-bar graph will want its own.
+- **One path and one stroke** for every LoadView per redraw, and one fill for the hairlines.
+- **`stepLength` is 1 pt. `lineWidth` defaults to 1 pt**, which tiles the steps into a solid silhouette; the default's final value is chosen by eye against the running app (§8). It is a parameter of `LoadStackView` rather than a constant so that the rendering tests can exercise more than one width, and because the later menu-bar graph will want its own.
 - **`stepLength` lives in the core**, as `LoadGraph.stepLength`, with `LoadGraph.stepCount(forWidth:)` beside it: the view that draws, the view that measures its width, and the app when it starts the monitor from a stored width all read the same constant. In the core it needs no isolation annotation, where a `View`'s static constant would, since a `View` is main-actor-isolated through the protocol and `LoadStackView` reads it inside `onGeometryChange`'s `@Sendable` transform.
 
 *Rationale: B.3.*
@@ -471,7 +462,7 @@ When `readProcessorTicks()` throws, the monitor records the error, leaves its st
 
 ### 5.13 Accessibility
 
-`Canvas` content is opaque to accessibility, so each `LoadView` carries an accessibility label ("CPU 3", using the CPU's index, which is its CPU ID) and a value (its latest load as a percentage).
+`Canvas` content is opaque to accessibility, so `LoadStackView` supplies one element per LoadView through `accessibilityChildren`, with a label ("CPU 3", using the CPU's index, which is its CPU ID) and a value (its latest load as a percentage).
 
 ## 6. Testing
 
@@ -568,6 +559,7 @@ The design leans on some platform behavior that is recalled or documented but no
 | **D17** | Stroke width and step length? | A 1 pt step, and a 1 pt stroke: the default the graph shipped with, kept after the look by eye at P4 (2026-09-22) — a solid silhouette, crisp at 2×, the shortest lines fine. The 0.5 pt alternative was offered and not wanted. | You | §5.5, §8 | B.3 |
 | **D18** | The version-1 extra's symbol and menu? | The `cpu` symbol; *Show CPULoadMeter* and *Settings…*; no Quit item. | You | §2.4, §5.2 | B.1 |
 | **D19** | *Show CPULoadMeter* did not bring the app to the foreground (P9). Activate through AppKit, or not? | Not for version 1: accept the behavior and document it as a known limitation; revisit later. Two AppKit forms were tried first and rolled back — the bare `NSApplication.activate()`, which changed nothing, and the cooperative `NSRunningApplication.activate(from:options:)`, which worked only with a Finder window in front. The pure-SwiftUI principle stands unbroken. | You | §1, §2.4, §5.1, §5.2, §8 | B.1, D.6 |
+| **D22** | One view per CPU, or one canvas for all? | One canvas (2026-09-24). Measured on the Release build, 24 CPUs, 1 s period, over three runs each: the per-CPU views cost the app 1.5 to 1.6% of a core, one canvas 0.9 to 1.0%; WindowServer's share was not separable from noise. The profile put the app's cost in SwiftUI's layout, not the strokes. Accessibility is kept through `accessibilityChildren`; the pixel tests test the rows. A LoadView stays the name of one CPU's graph. | You | §5.3, §5.5, §5.13 | B.3, D.6 |
 | **D21** | The App target's default actor isolation: SourceTools' `MainActor` override, or the project baseline? | The project baseline, `nonisolated`, as every sibling's `Project-Common.xcconfig` sets; the override is removed and, with it, every `nonisolated` the core carried to escape it. A `MainActor` default puts a whole target in one isolation domain so that a simple app need not think about synchronization — a crutch, and a poor design for anything else. Isolation is declared where it exists: the views and the `App` through SwiftUI's protocols, the monitor as `@MainActor`. | You | §3, §4.1, §4.2, §5.5 | B.17 |
 | **D20** | The extra can be removed by command-drag, and removing it with no window showing quits the app (P13). Prevent it? | Accept it and document it. SwiftUI offers no way to forbid the removal; re-inserting through an `isInserted` binding was the SwiftUI-only alternative, and an AppKit status item the full-Cocoa one. | You | §2.4, §5.1 | B.1, D.6 |
 
@@ -607,6 +599,7 @@ These were offered as defaults marked *(proposed)*, to be vetoed, and were not. 
 - **Implementation planning** (2026-09-21). Planning the build found two errors in the clean version, settled the question it had left open about the monitor's clock, and added the means of verifying the app without watching it. The changes are listed in A.4.
 - **Bringing up the scaffold** (2026-09-21). The first checks against the running app, in D.6. The automated ones (P2, P8, P12) and most of the hand checks (P1, P3, P13) held; the stored window size needed the hidden title bar's safe-area inset added; P9 failed, two AppKit activation requests were tried and rolled back, and the behavior was accepted as a known limitation for version 1 (D19); the extra proved removable and its removal was accepted (D20).
 - **The build** (2026-09-22). PRs 2 to 5 landed the core, the monitor, the graph, and the header, each with its checks in D.6; between them, a fix for the menus being rebuilt on every sample. The stroke width stayed at 1 pt (D17). With the header, version 1 as specified is complete; P9 and the icon are deferred (§8), and the live graph in the menu bar is the next iteration.
+- **One canvas** (2026-09-24). You noticed the window costing more CPU than it should, in the app and in WindowServer, and asked for an investigation driven by data. Logging was measured innocent; SwiftUI's layout of twenty-four views was the cost, and the graphs became rows of one canvas (D22).
 - **The isolation default** (2026-09-22). Reviewing PR 2 you asked why every core declaration was `nonisolated`; the answer exposed the App target's `MainActor` default, inherited from SourceTools, as the cause. You had it replaced by the project baseline (D21), and the keyword left the code.
 
 ### A.4 What planning the implementation changed
@@ -686,7 +679,9 @@ What this established:
 
 **A history is passed down as a value.** `LoadView`'s parent reads the history from the monitor in its `body` and passes it down, so the read that Observation must track happens in a `body`, which is where I understand SwiftUI to track it, rather than inside the canvas's renderer closure, where I am unsure it does. Both halves of that are **[R]**; passing the value down is correct under either.
 
-**Cost.** Per sample: cores × steps line segments — 24 × 3,200 ≈ 77 k on this machine with the window 3,200 pt wide, at most once a second. (3,200 is the screen width that appears in the probes' saved window frames; that I am reading that string's layout correctly is **[R]**.) I expect that to be comfortable for `Canvas` **[R]**; P7 measures it.
+**Cost, measured** (2026-09-24). With one `Canvas` per CPU the app took 1.6% of a core at a 397 × 792 pt window and WindowServer four points more than with the window closed; a `sample` profile put the app's own frames in SwiftUI's layout — `LayoutEngineBox.sizeThatFits`, `StackLayout.placeChildren` — with path building at six samples of forty-seven thousand **[O]**. The log line was measured innocent: removing it, or attaching a listener, changed nothing **[O]**. One canvas for every CPU cut the app's share to 0.9 to 1.0% over three runs; WindowServer's share, taken as window-open minus window-closed, swung too widely between runs to credit either design **[O]** (D.6 has every run). So the graphs are rows of one canvas (D22), and the lesson carries to the menu-bar graph.
+
+**Cost, as first estimated.** Per sample: cores × steps line segments — 24 × 3,200 ≈ 77 k on this machine with the window 3,200 pt wide, at most once a second. (3,200 is the screen width that appears in the probes' saved window frames; that I am reading that string's layout correctly is **[R]**.) I expect that to be comfortable for `Canvas` **[R]**; P7 measures it.
 
 **Alternatives considered.** A `Shape` view — the same geometry, retained rather than immediate, and a good thing to try later for comparison. Swift Charts, which defeats the purpose. An `NSViewRepresentable` around a custom `NSView` scrolling its own backing store — closest to the original and to the loose spec's literal wording, but it leaves SwiftUI, and it loses the rescaling on a height change.
 
@@ -1334,6 +1329,7 @@ The §7 checks as they were run, with what was seen. Conditions unless stated: t
 | A snapped window elsewhere re-fits at launch and quit | Not this app's doing; recorded so that it is not chased again. You, 2026-09-22. | With the fix for the menus merged, Music's main window zoomed to fill the screen when this app launched and again when it quit, and not on close and reopen, and not for Settings. Measured: while this app runs the screen's visible frame narrows by 6 pt on the Dock's side (128 to 122 with a left Dock at tile size 128) and returns at quit; Font Book's launch leaves it alone, because Font Book takes one of the Dock's three recent-application slots — net zero tiles — while this app never appears there and gets a tile of its own, so the Dock scales down. Launched from `~/Applications` the same; with the `MenuBarExtra` removed the same. Music's window had been snapped to the screen's left half and then resized by hand; a snapped window re-fits itself when the visible frame changes, and a freely placed one does not, as you confirmed. Why the Dock declines this app a recents slot is not known. |
 | **P5** | **Held**, after the focus-loss fix below. You. | Return commits; each preset sets the field and the period; `0`, `61`, `abc`, and `2.5` revert with no alert and no beep; the period survives a relaunch; the header sits clear of the traffic lights and sets the minimum width; the control's look raised no request. |
 | **P5**, focus loss | **Failed as first written, and fixed.** You. | Return and the presets committed; a click elsewhere in the window did not take focus from the field, and switching to another app or window did not commit either. Neither is a SwiftUI default: the graphs and labels are not focusable, so a click on them leaves the field first responder, and a window ceasing to be key does not change `@FocusState`. Now the main view owns the focus state and clears it on a click on the graphs or the header's text. A commit on the window ceasing to be key (`controlActiveState`) was added at the same time and then removed at your call: macOS leaves an editing field alone when its app goes to the background — Finder's rename field, Safari's address bar — and a draft that silently became a setting, or silently reverted, while the user was elsewhere would be the inconsistent behavior. The re-check of the click is by hand. |
+| The cost of the view hierarchy | **Measured, and the design changed (D22).** You noticed; the measurement was mine. | Release build, 397 × 792 pt window, 24 CPUs, 1 s period, `top -l 31 -s 1` on the app and on WindowServer, medians of 30 samples. Per-CPU views: app 1.6%, and 1.5% with the log line removed, 1.4% with a `log stream` listener attached, 2.0% as a Debug build. One canvas for all CPUs: 1.0%, 1.0%, 1.0% on the real build, 0.9% on a scratch build that had once read 0.5% at a quiet moment. Removing the accessibility children or drawing the hairlines in a plain color changed nothing (1.0%). Window closed, any build: 0.0%. WindowServer, taken as window-open minus window-closed in the same run: +4.3 and +4.0 for the per-CPU views, and +0.4, +4.0, +3.7, +2.1 for one canvas, with its window-closed readings swinging by 20 points between runs — not separable from noise with `top`; a better instrument is a later question. The `sample` profile of the per-CPU build: 47,592 of the samples in the kernel's idle traps; the hottest in-app frames `LayoutEngineBox.sizeThatFits` (19), `UnaryLayoutEngine.sizeThatFits` (14), `StackLayout.placeChildren` (7); path building, `RB::Path::Storage::append_element`, 6. So the app's cost was SwiftUI laying out 47 views a second, and the log line was innocent. |
 | **P7** cost at full display width | **Held**; sampling stays on the main actor. | The stored width preset to 3,200 (the window came up 3,072 wide, the widest the display allows), 24 CPUs, period 1 s, Release: `top -l 31 -s 1 -pid` gave the app a median 4.0% and a maximum 6.8% of one core; the per-sample line said 0.76 ms median, 1.10 ms maximum, against 0.31 ms at 809 steps. WindowServer sat at 15% with the app and 14% without in the control's first seconds, before unrelated activity muddied the control, so the app's share of it is a point at most. A 24 × 3,072-line redraw once a second is comfortable; nothing moves off the main actor. |
 | **P4** the look by eye | **Held; the stroke stays at 1 pt.** You. | On the Release build at 2×: strokes crisp, a zero load draws nothing, the shortest lines — including the one- and two-pixel ones the renderer draws taller in tests — look fine. Light and Dark switched live followed the label and separator colors with no relaunch. Grow and shrink behaved exactly as specified: zeros at the left on widening, the oldest first on narrowing. VoiceOver and the minimum height were on the list and raised no report. The 0.5 pt variant was offered and declined; D17 is settled at 1 pt. |
 | **P14** the step count flows up | **Held, with one transient gated out; the resize half held by hand.** | With a stored width of 3,200 the log read `Step count 900`, then `3200`, then `3072`: the view's width reaches the monitor. The 900 is SwiftUI's one layout at a default size before the window is placed — no one sees it — and a scratch build showed its report arriving 2 ms *before* the stack's `onAppear`, the placed width's report after. Left alone it would cut a history built with no window open down to 900 steps before the placement widened it again with zeros; `LoadStackView` therefore reports only after it has appeared, which drops exactly that one. The ordering is observed, not documented; if a placed-width report were ever dropped, the monitor's initial count comes from the same stored width the placement uses, so nothing would be lost. The resize half of P14 is a hand check. |
