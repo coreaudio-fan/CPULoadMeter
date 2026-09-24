@@ -6,10 +6,10 @@ import SwiftUI
 ///
 ///	One canvas rather than one view per CPU because SwiftUI's cost is in laying out and compositing views, not in the
 ///	strokes: 24 canvases and 23 hairlines re-laid-out every sample cost the app 1.6% of a core and WindowServer 4
-///	points, one canvas 0.5% and 0.4 (Design.md, D22 and D.6). The per-row drawing rules are section 5.5's; the
-///	accessibility a canvas cannot carry is supplied as children. It measures its own width and reports the step count
-///	that width holds, which is the one place the model depends on view geometry. Design.md, sections 2.7, 4.2, 5.3, and
-///	5.5.
+///	points, one canvas 0.5% and 0.4 (Design.md, D22 and D.6). The per-row drawing rules are section 5.5's. The canvas
+///	carries no accessibility: VoiceOver was seen to attach only to the header's two controls, whatever the graphs
+///	offered (D22). It measures its own width and reports the step count that width holds, which is the one place the
+///	model depends on view geometry. Design.md, sections 2.7, 4.2, 5.3, and 5.5.
 struct LoadStackView: View {
 
 	///	One history per CPU, in CPU ID order.
@@ -50,16 +50,6 @@ struct LoadStackView: View {
 			context.fill(boundaries, with: .style(.separator))
 		}
 		.frame(minHeight: 8 * CGFloat(histories.count), idealHeight: 20 * CGFloat(histories.count), maxHeight: .infinity)
-		.accessibilityChildren {
-			//	A canvas is opaque to accessibility, and the index is the one place the CPU's identity survives: the
-			//	kernel's array index is its CPU ID.
-			VStack {
-				ForEach(histories.indices, id: \.self) { cpuIndex in
-					Text("CPU \(cpuIndex)")
-						.accessibilityValue("\(Self.wholePercent(of: histories[cpuIndex])) percent")
-				}
-			}
-		}
 		.onGeometryChange(for: Int.self) { proxy in
 			LoadGraph.stepCount(forWidth: proxy.size.width)
 		} action: { stepCount in
@@ -97,9 +87,5 @@ struct LoadStackView: View {
 		}
 	}
 
-	///	A history's latest load as a whole percent, for the accessibility value.
-	private static func wholePercent(of history: LoadHistory) -> Int {
-		Int(((history.loads.last?.total ?? 0) * 100).rounded())
-	}
 
 }
