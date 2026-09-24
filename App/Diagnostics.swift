@@ -36,6 +36,15 @@ enum Diagnostics {
 		logger.debug("Step count \(stepCount)")
 	}
 
+	///	Written when sampling starts, with the CPU count and the step count, and when it stops.
+	static func logSampling(isStarting: Bool, cpuCount: Int, stepCount: Int) {
+		if isStarting {
+			logger.debug("Sampling started: \(cpuCount) CPUs, step count \(stepCount)")
+		} else {
+			logger.debug("Sampling stopped; history dropped at step count \(stepCount)")
+		}
+	}
+
 	///	A duration in milliseconds, for the log.
 	private static func milliseconds(_ duration: Duration) -> Double {
 		let components = duration.components

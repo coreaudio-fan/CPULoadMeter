@@ -10,7 +10,7 @@ The app reads the kernel's per-CPU tick counters through `host_processor_info` a
 - **One graph per core**, top to bottom in the kernel's order, sharing the window's height — all drawn in one canvas, since SwiftUI's cost is in laying out views, not in strokes. Each is a stroked path of vertical lines, one point per step: the newest load at the right edge, older ones to the left, the height the load's share of the interval. The history holds exactly as many loads as the graph has steps — widen the window and zeros fill in at the left, narrow it and the oldest go first — and is not kept between launches.
 - **The menu bar item**, a `cpu` symbol whose menu opens the main window and the settings. Closing the window leaves the app running; the Window menu and the item bring it back. The one setting is whether the main window opens at launch.
 
-Sampling runs for the life of the process, window or no window. A failed read keeps the last good sample as the baseline, so the next success averages over the longer interval; a change in the number of CPUs takes a new baseline. Colors are the system's: the plot in the label color, the hairlines in the separator color, so Light and Dark need no code.
+Sampling runs while the window is shown; closing it stops sampling and drops the history, and reopening starts fresh, as at launch. A failed read keeps the last good sample as the baseline, so the next success averages over the longer interval; a change in the number of CPUs takes a new baseline. Colors are the system's: the plot in the label color, the hairlines in the separator color, so Light and Dark need no code.
 
 ## Building
 
