@@ -10,8 +10,8 @@ struct SettingsView: View {
 	///	The menu bar graph's period in whole seconds. The extra's label reads the same key and applies it.
 	@AppStorage(DefaultsKey.menuBarPeriodSeconds) private var menuBarPeriodSeconds = SamplingPeriod.default.seconds
 
-	///	The menu bar graph's history length in whole seconds, likewise.
-	@AppStorage(DefaultsKey.menuBarHistorySeconds) private var menuBarHistorySeconds = MenuBarHistoryLength.default.seconds
+	///	The menu bar graph's history length in samples, likewise.
+	@AppStorage(DefaultsKey.menuBarHistorySamples) private var menuBarHistorySamples = MenuBarHistoryLength.default.value
 
 	///	The width of one CPU's graph in the menu bar in whole points, likewise.
 	@AppStorage(DefaultsKey.menuBarGraphWidth) private var menuBarGraphWidth = GraphWidth.default.value
@@ -31,7 +31,7 @@ struct SettingsView: View {
 			Toggle("Open main window at launch", isOn: $isMainWindowOpenedAtLaunch)
 			Section("Menu bar graph") {
 				SettingControl(prompt: "Update every", unit: "seconds", value: menuBarPeriod, isEditing: $isEditingPeriod)
-				SettingControl(prompt: "Keep", unit: "seconds of history", value: menuBarHistory, isEditing: $isEditingHistory)
+				SettingControl(prompt: "Keep", unit: "samples of history", value: menuBarHistory, isEditing: $isEditingHistory)
 				SettingControl(prompt: "Draw each core", unit: "points wide", value: graphWidth, isEditing: $isEditingWidth)
 			}
 		}
@@ -58,9 +58,9 @@ struct SettingsView: View {
 	///	The stored history length as the control's type, likewise.
 	private var menuBarHistory: Binding<MenuBarHistoryLength> {
 		Binding {
-			MenuBarHistoryLength(seconds: menuBarHistorySeconds) ?? .default
+			MenuBarHistoryLength(value: menuBarHistorySamples) ?? .default
 		} set: { history in
-			menuBarHistorySeconds = history.seconds
+			menuBarHistorySamples = history.value
 		}
 	}
 

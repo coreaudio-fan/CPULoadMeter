@@ -3,27 +3,17 @@ import Testing
 
 struct HistoryLengthTests {
 
-	//	The sample count is the whole periods the length holds: a partial period is dropped, and a length shorter than
-	//	the period still gives one sample.
-	@Test func theSampleCountIsTheWholePeriodsTheLengthHolds() async throws {
-		let sixty = try #require(MenuBarHistoryLength(seconds: 60))
-		let thirty = try #require(MenuBarHistoryLength(seconds: 30))
-		let seven = try #require(SamplingPeriod(seconds: 7))
-		let minute = try #require(SamplingPeriod(seconds: 60))
+	//	A history length is a count of samples, and the sample count is the setting itself: no period divides it, so no
+	//	period can change how finely a graph is drawn.
+	@Test func theSampleCountIsTheSettingItself() async throws {
+		let ninety = try #require(MenuBarHistoryLength(value: 90))
+		let hour = try #require(WindowHistoryLength(value: 3_600))
 
-		#expect(sixty.sampleCount(at: .default) == 60)
-		#expect(sixty.sampleCount(at: seven) == 8)
-		#expect(thirty.sampleCount(at: minute) == 1)
-		#expect(MenuBarHistoryLength.presets.last?.sampleCount(at: .default) == 120)
-	}
-
-	@Test func theWindowsHistoryCountsTheSameWayOverItsWiderRange() async throws {
-		let hour = try #require(WindowHistoryLength(seconds: 3_600))
-		let seven = try #require(SamplingPeriod(seconds: 7))
-
-		#expect(WindowHistoryLength.default.sampleCount(at: .default) == 300)
-		#expect(hour.sampleCount(at: .default) == 3_600)
-		#expect(hour.sampleCount(at: seven) == 514)
+		#expect(ninety.sampleCount == 90)
+		#expect(hour.sampleCount == 3_600)
+		#expect(MenuBarHistoryLength.default.sampleCount == 60)
+		#expect(WindowHistoryLength.default.sampleCount == 300)
+		#expect(MenuBarHistoryLength.presets.map(\.sampleCount) == [30, 60, 90, 120])
 	}
 
 }

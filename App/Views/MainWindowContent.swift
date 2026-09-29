@@ -18,18 +18,19 @@ struct MainWindowContent: View {
 	///	The sampling period in whole seconds, stored again whenever the monitor's changes: the monitor persists nothing.
 	@AppStorage(DefaultsKey.samplingPeriodSeconds) private var samplingPeriodSeconds = SamplingPeriod.default.seconds
 
-	///	The history length in whole seconds. The monitor holds a sample count and knows no history length, so this view
-	///	owns the setting and gives the monitor the count it implies.
-	@AppStorage(DefaultsKey.historySeconds) private var historySeconds = WindowHistoryLength.default.seconds
+	///	The history length in samples. The monitor persists nothing, so this view owns the setting and gives the monitor
+	///	its sample count.
+	@AppStorage(DefaultsKey.historySamples) private var historySamples = WindowHistoryLength.default.value
 
 	var body: some View {
 		MainView(processorName: processorName, machineLoad: monitor.state.machineLoad, isLastSampleFailed: monitor.lastError != nil, histories: monitor.state.histories, period: $monitor.period, history: history)
+			//	A new period is stored and changes nothing else: it is the rate the samples arrive at, and the history
+			//	holds as many of them as before (Design.md, D32).
 			.onChange(of: monitor.period) {
 				samplingPeriodSeconds = monitor.period.seconds
-				applySampleCount()
 			}
-			.onChange(of: historySeconds) {
-				applySampleCount()
+			.onChange(of: historySamples) {
+				monitor.setSampleCount(history.wrappedValue.sampleCount)
 			}
 
 			//	Sampling runs only while the window is shown. Closing the window hides it rather than destroying it, and
@@ -44,18 +45,13 @@ struct MainWindowContent: View {
 	}
 
 	///	The stored history length as the control's type: an invalid stored value reads as the default, and a commit
-	///	stores the seconds.
+	///	stores the samples.
 	private var history: Binding<WindowHistoryLength> {
 		Binding {
-			WindowHistoryLength(seconds: historySeconds) ?? .default
+			WindowHistoryLength(value: historySamples) ?? .default
 		} set: { history in
-			historySeconds = history.seconds
+			historySamples = history.value
 		}
-	}
-
-	///	Gives the monitor the sample count the history length and the period imply: the whole periods the history holds.
-	private func applySampleCount() {
-		monitor.setSampleCount(history.wrappedValue.sampleCount(at: monitor.period))
 	}
 
 }

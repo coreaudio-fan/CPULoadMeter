@@ -110,6 +110,28 @@ struct LoadMonitorTests {
 		#expect(reader.readCount == 1)
 	}
 
+	//	The period is the rate the samples arrive at and nothing more: a new one leaves the history, and how many
+	//	samples it holds, exactly as they were.
+	@Test(.timeLimit(.minutes(1))) func aNewPeriodLeavesTheHistoryAndItsSampleCountAlone() async throws {
+		let sleeper = ScriptedSleep()
+		let reader = ScriptedTicks([
+			.success([ticks(user: 0, idle: 0)]),
+			.success([ticks(user: 4, idle: 12)]),
+		])
+		let monitor = LoadMonitor(name: "test", period: .default, sampleCount: 3, readTicks: reader.read, sleep: sleeper.sleep)
+		monitor.resume()
+		await sleeper.awaitDeadlines(1)
+		sleeper.release()
+		await sleeper.awaitDeadlines(2)
+		let before = monitor.state
+		monitor.period = try #require(SamplingPeriod(seconds: 30))
+		await sleeper.awaitDeadlines(3)
+
+		#expect(before.histories.map(\.loads) == [[.zero, .zero, load(4)]])
+		#expect(monitor.state == before)
+		#expect(monitor.state.sampleCount == 3)
+	}
+
 	@Test func aMonitorDoesNotSampleUntilResumed() async throws {
 		let sleeper = ScriptedSleep()
 		let reader = ScriptedTicks([.success([ticks(user: 0, idle: 0)])])

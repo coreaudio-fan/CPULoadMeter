@@ -36,18 +36,18 @@ struct CPULoadMeterApp: App {
 	///	The processor's name, read once at launch; `nil` if the kernel would not say.
 	private let processorName: String?
 
-	///	Reads the processor's name and the CPU count, creates each monitor from its stored period and history length, at
-	///	the sample count the two imply, and writes the launch diagnostic. Neither monitor samples until its view
-	///	appears, so the launch line's CPU count is a read of its own. The defaults are read here directly because the
-	///	property wrappers above are not usable before the app exists; they read the same store.
+	///	Reads the processor's name and the CPU count, creates each monitor from its stored period and history length,
+	///	and writes the launch diagnostic. Neither monitor samples until its view appears, so the launch line's CPU count
+	///	is a read of its own. The defaults are read here directly because the property wrappers above are not usable
+	///	before the app exists; they read the same store.
 	init() {
 		let defaults = UserDefaults.standard
 		let period = (defaults.object(forKey: DefaultsKey.samplingPeriodSeconds) as? Int).flatMap(SamplingPeriod.init(seconds:)) ?? .default
-		let history = (defaults.object(forKey: DefaultsKey.historySeconds) as? Int).flatMap(WindowHistoryLength.init(seconds:)) ?? .default
+		let history = (defaults.object(forKey: DefaultsKey.historySamples) as? Int).flatMap(WindowHistoryLength.init(value:)) ?? .default
 		let menuBarPeriod = (defaults.object(forKey: DefaultsKey.menuBarPeriodSeconds) as? Int).flatMap(SamplingPeriod.init(seconds:)) ?? .default
-		let menuBarHistory = (defaults.object(forKey: DefaultsKey.menuBarHistorySeconds) as? Int).flatMap(MenuBarHistoryLength.init(seconds:)) ?? .default
-		_monitor = State(initialValue: LoadMonitor(name: "window", period: period, sampleCount: history.sampleCount(at: period)))
-		_menuBarMonitor = State(initialValue: LoadMonitor(name: "menu bar", period: menuBarPeriod, sampleCount: menuBarHistory.sampleCount(at: menuBarPeriod)))
+		let menuBarHistory = (defaults.object(forKey: DefaultsKey.menuBarHistorySamples) as? Int).flatMap(MenuBarHistoryLength.init(value:)) ?? .default
+		_monitor = State(initialValue: LoadMonitor(name: "window", period: period, sampleCount: history.sampleCount))
+		_menuBarMonitor = State(initialValue: LoadMonitor(name: "menu bar", period: menuBarPeriod, sampleCount: menuBarHistory.sampleCount))
 		processorName = readProcessorName()
 		Diagnostics.logLaunch(processorName: processorName, cpuCount: (try? readProcessorTicks())?.count ?? 0)
 	}

@@ -11,9 +11,9 @@ enum DefaultsKey {
 	///	default.
 	static let samplingPeriodSeconds = "samplingPeriodSeconds"
 
-	///	The window's history length in whole seconds. An `Int`, 300 when absent; a stored value out of range falls back
-	///	to the default.
-	static let historySeconds = "historySeconds"
+	///	The window's history length in samples. An `Int`, 300 when absent; a stored value out of range falls back to the
+	///	default.
+	static let historySamples = "historySamples"
 
 	///	The width of one CPU's graph in the menu bar in whole points. An `Int`, 30 when absent; a stored value out of
 	///	range falls back to the default.
@@ -23,9 +23,9 @@ enum DefaultsKey {
 	///	falls back to the default.
 	static let menuBarPeriodSeconds = "menuBarPeriodSeconds"
 
-	///	The menu bar graph's history length in whole seconds. An `Int`, 60 when absent; a stored value out of range
-	///	falls back to the default.
-	static let menuBarHistorySeconds = "menuBarHistorySeconds"
+	///	The menu bar graph's history length in samples. An `Int`, 60 when absent; a stored value out of range falls back
+	///	to the default.
+	static let menuBarHistorySamples = "menuBarHistorySamples"
 
 	///	The main window's last width in points. A `Double`, absent until the window has been shown.
 	static let mainWindowWidth = "mainWindowWidth"

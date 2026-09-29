@@ -1,4 +1,4 @@
-///	One CPU's retained loads, oldest first: exactly as many samples as its history length holds periods, always.
+///	One CPU's retained loads, oldest first: exactly as many samples as its history length says, always.
 ///
 ///	There is no partially full state. A new history is all zeros; appending drops the oldest load and adds the newest,
 ///	so the length cannot change; resizing prepends zeros to grow, so that the added samples are the oldest, and keeps

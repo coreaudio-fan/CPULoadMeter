@@ -49,7 +49,7 @@ struct HeaderView: View {
 						endEditing()
 					}
 				Spacer()
-				SettingControl(prompt: "Show the last", unit: "seconds", value: $history, isEditing: isEditingHistory)
+				SettingControl(prompt: "Show the last", unit: "samples", value: $history, isEditing: isEditingHistory)
 			}
 		}
 		.padding(.horizontal, 12)

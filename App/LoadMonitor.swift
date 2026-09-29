@@ -92,9 +92,8 @@ import Observation
 		loop?.cancel()
 	}
 
-	///	Resizes every history to the samples its history length holds at its period. Whoever owns the two settings works
-	///	the count out and sets it here; the monitor knows neither the history length nor any view's width (Design.md,
-	///	section 4.2).
+	///	Resizes every history to a new sample count, which is the history length the user set. Whoever owns that setting
+	///	sets it here; the period has no part in it, and the monitor knows no view's width (Design.md, section 4.2).
 	func setSampleCount(_ sampleCount: Int) {
 		if sampleCount != state.sampleCount {
 			state = state.resized(toSampleCount: sampleCount)
