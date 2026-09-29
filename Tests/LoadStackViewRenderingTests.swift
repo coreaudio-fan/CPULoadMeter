@@ -14,18 +14,20 @@ struct LoadStackViewRenderingTests {
 
 	///	A history holding `newestFirst`, given newest first as the drawing walks it, at exactly that many steps.
 	private func history(newestFirst: [UInt32]) -> LoadHistory {
-		newestFirst.reversed().reduce(LoadHistory(stepCount: newestFirst.count)) { $0.appending(load(sixteenths: $1)) }
+		newestFirst.reversed().reduce(LoadHistory(sampleCount: newestFirst.count)) { $0.appending(load(sixteenths: $1)) }
 	}
 
-	///	The five loads every case draws: 100, 0, 50, 37.5, and 75 percent, newest first, asymmetric on purpose so that a
-	///	flipped axis or a left-anchored walk cannot match. Every line is three device pixels or taller at 1x: the
-	///	renderer draws lines of one or two pixels one pixel taller than the geometry says, an observed behavior with no
-	///	documentation (Design.md, D.6), so the tests stay on the lines it draws faithfully.
-	private let newestFirst: [UInt32] = [16, 0, 8, 6, 12]
+	///	The loads every case draws, one per point of an 8 pt view: 100, 0, 50, 37.5, and 75 percent and three zeros,
+	///	newest first, asymmetric on purpose so that a flipped axis or a left-anchored walk cannot match. As many samples
+	///	as points, so that each line is its own sample and these cases test the drawing alone; the fitting has cases of
+	///	its own below. Every line is three device pixels or taller at 1x: the renderer draws lines of one or two pixels
+	///	one pixel taller than the geometry says, an observed behavior with no documentation (Design.md, D.6), so the
+	///	tests stay on the lines it draws faithfully.
+	private let newestFirst: [UInt32] = [16, 0, 8, 6, 12, 0, 0, 0]
 
 	///	Renders a stack of `histories`, each row 8 points tall, at `width` points, or fails the test.
 	private func grid(_ histories: [LoadHistory], lineWidth: CGFloat, width: CGFloat = 8, scale: CGFloat) throws -> PixelGrid {
-		let stack = LoadStackView(histories: histories, lineWidth: lineWidth, reportStepCount: { _ in })
+		let stack = LoadStackView(histories: histories, lineWidth: lineWidth)
 		return try #require(PixelGrid(of: stack, width: width, height: 8 * CGFloat(histories.count), scale: scale))
 	}
 
@@ -106,7 +108,7 @@ struct LoadStackViewRenderingTests {
 	//	A fractional width: the lines are anchored to the right edge, so at 8.5 points a 1 pt line at 2x covers pixel
 	//	columns 15 and 16 of 17; anchored to the left it would cover 0 and 1.
 	@Test func theNewestLineIsAnchoredToTheRightEdge() async throws {
-		let grid = try grid([history(newestFirst: [16])], lineWidth: 1, width: 8.5, scale: 2)
+		let grid = try grid([history(newestFirst: [16, 0, 0, 0, 0, 0, 0, 0])], lineWidth: 1, width: 8.5, scale: 2)
 		let reference = try referenceAlpha(of: grid)
 
 		#expect(grid.width == 17)
@@ -115,24 +117,35 @@ struct LoadStackViewRenderingTests {
 		#expect(grid.alpha(column: 14, row: 4) == 0)
 	}
 
-	@Test func aHistoryLongerThanTheViewDrawsItsNewestSteps() async throws {
-		let longer = history(newestFirst: [16, 16, 16, 16, 16, 16, 16, 16, 0, 0, 0, 0])
-		let grid = try grid([longer], lineWidth: 1, scale: 1)
+	//	Twice as many samples as points: every point draws the peak of its two samples, so no spike is lost. The
+	//	samples, newest first, pair up as (12, 16), (0, 8), (12, 6), and (0, 0).
+	@Test func moreSamplesThanPointsDrawsThePeakOfEachGroup() async throws {
+		let longer = history(newestFirst: [12, 16, 0, 8, 12, 6, 0, 0])
+		let grid = try grid([longer], lineWidth: 1, width: 4, scale: 1)
 		let reference = try referenceAlpha(of: grid)
 
-		try expectRow(grid, rowIndex: 0, newestFirst: Array(repeating: 16, count: 8), lineWidth: 1, width: 8, scale: 1, reference: reference, name: "loadstack-longer.png")
+		#expect(grid.width == 4)
+		try expectRow(grid, rowIndex: 0, newestFirst: [16, 8, 12, 0], lineWidth: 1, width: 4, scale: 1, reference: reference, name: "loadstack-peaks.png")
 	}
 
-	@Test func aHistoryShorterThanTheViewLeavesTheLeftBlank() async throws {
-		let grid = try grid([history(newestFirst: [16, 16, 16])], lineWidth: 1, scale: 1)
+	//	Half as many samples as points: every sample is a block two points wide, its edges on whole points.
+	@Test func fewerSamplesThanPointsDrawsEverySampleAsABlock() async throws {
+		let grid = try grid([history(newestFirst: [16, 8, 6, 12])], lineWidth: 1, scale: 1)
 		let reference = try referenceAlpha(of: grid)
 
-		try expectRow(grid, rowIndex: 0, newestFirst: [16, 16, 16], lineWidth: 1, width: 8, scale: 1, reference: reference, name: "loadstack-shorter.png")
-		#expect(grid.alpha(column: 4, row: 7) == 0)
+		try expectRow(grid, rowIndex: 0, newestFirst: [16, 16, 8, 8, 6, 6, 12, 12], lineWidth: 1, width: 8, scale: 1, reference: reference, name: "loadstack-blocks.png")
+	}
+
+	//	An uneven fit: three samples in eight points are blocks of three, two, and three points, newest at the right.
+	@Test func anUnevenFitDrawsBlocksOnWholePoints() async throws {
+		let grid = try grid([history(newestFirst: [16, 8, 12])], lineWidth: 1, scale: 1)
+		let reference = try referenceAlpha(of: grid)
+
+		try expectRow(grid, rowIndex: 0, newestFirst: [16, 16, 16, 8, 8, 12, 12, 12], lineWidth: 1, width: 8, scale: 1, reference: reference, name: "loadstack-uneven.png")
 	}
 
 	@Test func zeroHistoriesDrawNothing() async throws {
-		let grid = try grid([LoadHistory(stepCount: 8), LoadHistory(stepCount: 8)], lineWidth: 1, scale: 1)
+		let grid = try grid([LoadHistory(sampleCount: 8), LoadHistory(sampleCount: 8)], lineWidth: 1, scale: 1)
 
 		for row in 0..<grid.height where row != 8 {
 			for column in 0..<grid.width {
@@ -143,7 +156,7 @@ struct LoadStackViewRenderingTests {
 
 	//	Three rows: each CPU's history in its own row, top to bottom in order, with a hairline on each boundary.
 	@Test func eachRowDrawsItsOwnHistoryWithAHairlineBetween() async throws {
-		let rows: [[UInt32]] = [newestFirst, [16, 16, 16], [12, 12, 12, 12, 12, 12, 12, 12]]
+		let rows: [[UInt32]] = [newestFirst, [16, 16, 16, 16, 16, 16, 16, 16], [12, 12, 12, 12, 12, 12, 12, 12]]
 		let grid = try grid(rows.map { history(newestFirst: $0) }, lineWidth: 1, scale: 1)
 		let reference = try referenceAlpha(of: grid)
 

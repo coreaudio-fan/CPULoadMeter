@@ -1,8 +1,8 @@
 import SwiftUI
 
 ///	The header: the processor's name and the CPU count with the period control beside them, and below, the machine-wide
-///	CPU usage in `top`'s wording. Pinned to the top of the window at its natural height. Design.md, sections 2.6 and
-///	5.4.
+///	CPU usage in `top`'s wording with the history control beside it. Pinned to the top of the window at its natural
+///	height. Design.md, sections 2.6 and 5.4.
 struct HeaderView: View {
 
 	///	The processor's name, or `nil` if the kernel would not say.
@@ -17,11 +17,17 @@ struct HeaderView: View {
 	///	Whether the last sample failed to read; while samples fail, the usage line says so.
 	let isLastSampleFailed: Bool
 
-	///	The sampling period, for the control.
+	///	The sampling period, for its control.
 	@Binding var period: SamplingPeriod
 
-	///	Whether the period field has focus. A click on the header's text clears it, which commits the field.
+	///	The history length, for its control.
+	@Binding var history: WindowHistoryLength
+
+	///	Whether the period field has focus.
 	let isEditingPeriod: FocusState<Bool>.Binding
+
+	///	Whether the history field has focus.
+	let isEditingHistory: FocusState<Bool>.Binding
 
 	var body: some View {
 		VStack(alignment: .leading, spacing: 4) {
@@ -30,19 +36,30 @@ struct HeaderView: View {
 				Text("\(processorName ?? "Unknown CPU") · \(cpuCount) cores")
 					.fixedSize()
 					.onTapGesture {
-						isEditingPeriod.wrappedValue = false
+						endEditing()
 					}
 				Spacer()
-				SecondsControl(prompt: "Update every", unit: "seconds", value: $period, isEditing: isEditingPeriod)
+				SettingControl(prompt: "Update every", unit: "seconds", value: $period, isEditing: isEditingPeriod)
 			}
-			Text(Self.usageLine(load: machineLoad, isLastSampleFailed: isLastSampleFailed))
-				.monospacedDigit()
-				.onTapGesture {
-					isEditingPeriod.wrappedValue = false
-				}
+			HStack {
+				Text(Self.usageLine(load: machineLoad, isLastSampleFailed: isLastSampleFailed))
+					.monospacedDigit()
+					.fixedSize()
+					.onTapGesture {
+						endEditing()
+					}
+				Spacer()
+				SettingControl(prompt: "Show the last", unit: "seconds", value: $history, isEditing: isEditingHistory)
+			}
 		}
 		.padding(.horizontal, 12)
 		.padding(.vertical, 8)
+	}
+
+	///	Takes focus from both fields, which commits whichever was editing: what a click on the header's text does.
+	private func endEditing() {
+		isEditingPeriod.wrappedValue = false
+		isEditingHistory.wrappedValue = false
 	}
 
 	///	The usage line: `top`'s wording with whole percentages that sum to 100; a dash before the first load; and a

@@ -18,21 +18,24 @@ struct MenuBarGraphLabel: View {
 	@AppStorage(DefaultsKey.menuBarPeriodSeconds) private var periodSeconds = SamplingPeriod.default.seconds
 
 	///	The menu bar graph's history length, likewise.
-	@AppStorage(DefaultsKey.menuBarHistorySeconds) private var historySeconds = HistoryLength.default.seconds
+	@AppStorage(DefaultsKey.menuBarHistorySeconds) private var historySeconds = MenuBarHistoryLength.default.seconds
+
+	///	The width of one CPU's graph, likewise. It bears on the drawing alone; the monitor never hears of it.
+	@AppStorage(DefaultsKey.menuBarGraphWidth) private var graphWidthPoints = GraphWidth.default.value
 
 	///	The display's scale, so that the rendered image has a pixel per device pixel.
 	@Environment(\.displayScale) private var displayScale
 
 	var body: some View {
-		let renderer = ImageRenderer(content: MenuBarGraph(histories: monitor.state.histories))
+		let graphWidth = GraphWidth(value: graphWidthPoints) ?? .default
+		let renderer = ImageRenderer(content: MenuBarGraph(histories: monitor.state.histories, graphWidth: graphWidth.points))
 		renderer.scale = displayScale
 		return Group {
 			if let image = renderer.cgImage {
 				Image(decorative: image, scale: displayScale)
 					.renderingMode(.template)
 			} else {
-				//	Nothing to render: no CPUs yet, or the renderer declined. The item keeps its symbol rather than
-				//	vanishing.
+				//	Nothing to render: the renderer declined. The item keeps its symbol rather than vanishing.
 				Image(systemName: "cpu")
 			}
 		}
@@ -43,8 +46,8 @@ struct MenuBarGraphLabel: View {
 			monitor.resume()
 		}
 
-		//	A settings change reaches the monitor from here, the way the window's period reaches its monitor from the
-		//	window's root view. The width follows both settings: the whole periods the history holds.
+		//	A settings change reaches the monitor from here, the way the window's reach its monitor from the window's
+		//	root view. The sample count follows both: the whole periods the history holds.
 		.onChange(of: periodSeconds) {
 			applySettings()
 		}
@@ -53,15 +56,15 @@ struct MenuBarGraphLabel: View {
 		}
 	}
 
-	///	Gives the monitor the stored period, if it differs, and the step count the two settings imply. Setting an equal
-	///	period would still restart the loop, so it is compared first.
+	///	Gives the monitor the stored period, if it differs, and the sample count the two settings imply. Setting an
+	///	equal period would still restart the loop, so it is compared first.
 	private func applySettings() {
 		let period = SamplingPeriod(seconds: periodSeconds) ?? .default
-		let history = HistoryLength(seconds: historySeconds) ?? .default
+		let history = MenuBarHistoryLength(seconds: historySeconds) ?? .default
 		if monitor.period != period {
 			monitor.period = period
 		}
-		monitor.setStepCount(history.stepCount(at: period))
+		monitor.setSampleCount(history.sampleCount(at: period))
 	}
 
 }

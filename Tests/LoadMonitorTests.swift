@@ -18,12 +18,12 @@ struct LoadMonitorTests {
 		let sleeper = ScriptedSleep()
 		let reader = ScriptedTicks([.success([ticks(user: 0, idle: 0), ticks(user: 0, idle: 0)])])
 		let before = ContinuousClock.now
-		let monitor = LoadMonitor(name: "test", period: .default, stepCount: 3, readTicks: reader.read, sleep: sleeper.sleep)
+		let monitor = LoadMonitor(name: "test", period: .default, sampleCount: 3, readTicks: reader.read, sleep: sleeper.sleep)
 		monitor.resume()
 
 		#expect(reader.readCount == 1)
 		#expect(monitor.state.previousTicks.count == 2)
-		#expect(monitor.state.histories == [LoadHistory(stepCount: 3), LoadHistory(stepCount: 3)])
+		#expect(monitor.state.histories == [LoadHistory(sampleCount: 3), LoadHistory(sampleCount: 3)])
 		#expect(monitor.state.machineLoad == nil)
 		#expect(monitor.lastError == nil)
 		await sleeper.awaitDeadlines(1)
@@ -41,7 +41,7 @@ struct LoadMonitorTests {
 			.failure(MachError(.failure)),
 			.success([ticks(user: 16, idle: 16)]),
 		])
-		let monitor = LoadMonitor(name: "test", period: .default, stepCount: 2, readTicks: reader.read, sleep: sleeper.sleep)
+		let monitor = LoadMonitor(name: "test", period: .default, sampleCount: 2, readTicks: reader.read, sleep: sleeper.sleep)
 		monitor.resume()
 		await sleeper.awaitDeadlines(1)
 		sleeper.release()
@@ -73,7 +73,7 @@ struct LoadMonitorTests {
 			.success([ticks(user: 0, idle: 0), ticks(user: 0, idle: 0), ticks(user: 0, idle: 0)]),
 			.success([ticks(user: 4, idle: 12), ticks(user: 4, idle: 12), ticks(user: 4, idle: 12)]),
 		])
-		let monitor = LoadMonitor(name: "test", period: .default, stepCount: 2, readTicks: reader.read, sleep: sleeper.sleep)
+		let monitor = LoadMonitor(name: "test", period: .default, sampleCount: 2, readTicks: reader.read, sleep: sleeper.sleep)
 		monitor.resume()
 		await sleeper.awaitDeadlines(1)
 		sleeper.release()
@@ -84,7 +84,7 @@ struct LoadMonitorTests {
 		sleeper.release()
 		await sleeper.awaitDeadlines(3)
 
-		#expect(monitor.state.histories == [LoadHistory(stepCount: 2), LoadHistory(stepCount: 2), LoadHistory(stepCount: 2)])
+		#expect(monitor.state.histories == [LoadHistory(sampleCount: 2), LoadHistory(sampleCount: 2), LoadHistory(sampleCount: 2)])
 		#expect(monitor.state.machineLoad == nil)
 
 		sleeper.release()
@@ -97,7 +97,7 @@ struct LoadMonitorTests {
 	@Test(.timeLimit(.minutes(1))) func aNewPeriodRestartsTheLoopOneNewPeriodAway() async throws {
 		let sleeper = ScriptedSleep()
 		let reader = ScriptedTicks([.success([ticks(user: 0, idle: 0)])])
-		let monitor = LoadMonitor(name: "test", period: .default, stepCount: 1, readTicks: reader.read, sleep: sleeper.sleep)
+		let monitor = LoadMonitor(name: "test", period: .default, sampleCount: 1, readTicks: reader.read, sleep: sleeper.sleep)
 		monitor.resume()
 		await sleeper.awaitDeadlines(1)
 		let changed = ContinuousClock.now
@@ -113,7 +113,7 @@ struct LoadMonitorTests {
 	@Test func aMonitorDoesNotSampleUntilResumed() async throws {
 		let sleeper = ScriptedSleep()
 		let reader = ScriptedTicks([.success([ticks(user: 0, idle: 0)])])
-		let monitor = LoadMonitor(name: "test", period: .default, stepCount: 3, readTicks: reader.read, sleep: sleeper.sleep)
+		let monitor = LoadMonitor(name: "test", period: .default, sampleCount: 3, readTicks: reader.read, sleep: sleeper.sleep)
 		await Task.yield()
 
 		#expect(!(monitor.isSampling))
@@ -125,7 +125,7 @@ struct LoadMonitorTests {
 	@Test(.timeLimit(.minutes(1))) func suspendingStopsTheLoopAndDropsTheHistory() async throws {
 		let sleeper = ScriptedSleep()
 		let reader = ScriptedTicks([.success([ticks(user: 0, idle: 0)]), .success([ticks(user: 4, idle: 12)])])
-		let monitor = LoadMonitor(name: "test", period: .default, stepCount: 2, readTicks: reader.read, sleep: sleeper.sleep)
+		let monitor = LoadMonitor(name: "test", period: .default, sampleCount: 2, readTicks: reader.read, sleep: sleeper.sleep)
 		monitor.resume()
 		await sleeper.awaitDeadlines(1)
 		sleeper.release()
@@ -139,7 +139,7 @@ struct LoadMonitorTests {
 		#expect(!(monitor.isSampling))
 		#expect(monitor.state.histories.isEmpty)
 		#expect(monitor.state.machineLoad == nil)
-		#expect(monitor.state.stepCount == 2)
+		#expect(monitor.state.sampleCount == 2)
 		#expect(reader.readCount == readsBefore)
 		#expect(sleeper.deadlines.count == 2)
 	}
@@ -147,7 +147,7 @@ struct LoadMonitorTests {
 	@Test(.timeLimit(.minutes(1))) func resumingStartsOverFromAFreshBaseline() async throws {
 		let sleeper = ScriptedSleep()
 		let reader = ScriptedTicks([.success([ticks(user: 0, idle: 0)]), .success([ticks(user: 4, idle: 12)]), .success([ticks(user: 100, idle: 100)])])
-		let monitor = LoadMonitor(name: "test", period: .default, stepCount: 2, readTicks: reader.read, sleep: sleeper.sleep)
+		let monitor = LoadMonitor(name: "test", period: .default, sampleCount: 2, readTicks: reader.read, sleep: sleeper.sleep)
 		monitor.resume()
 		await sleeper.awaitDeadlines(1)
 		sleeper.release()
@@ -158,14 +158,14 @@ struct LoadMonitorTests {
 
 		#expect(monitor.isSampling)
 		#expect(reader.readCount == 3)
-		#expect(monitor.state.histories == [LoadHistory(stepCount: 2)])
+		#expect(monitor.state.histories == [LoadHistory(sampleCount: 2)])
 		#expect(monitor.state.machineLoad == nil)
 	}
 
 	@Test func aNewPeriodWhileSuspendedDoesNotStartTheLoop() async throws {
 		let sleeper = ScriptedSleep()
 		let reader = ScriptedTicks([.success([ticks(user: 0, idle: 0)])])
-		let monitor = LoadMonitor(name: "test", period: .default, stepCount: 1, readTicks: reader.read, sleep: sleeper.sleep)
+		let monitor = LoadMonitor(name: "test", period: .default, sampleCount: 1, readTicks: reader.read, sleep: sleeper.sleep)
 		monitor.period = try #require(SamplingPeriod(seconds: 5))
 		await Task.yield()
 		await Task.yield()
@@ -175,17 +175,17 @@ struct LoadMonitorTests {
 		#expect(monitor.period.seconds == 5)
 	}
 
-	@Test func settingTheStepCountResizesEveryHistoryAndIgnoresTheSameCount() async throws {
+	@Test func settingTheSampleCountResizesEveryHistoryAndIgnoresTheSameCount() async throws {
 		let sleeper = ScriptedSleep()
 		let reader = ScriptedTicks([.success([ticks(user: 0, idle: 0), ticks(user: 0, idle: 0)])])
-		let monitor = LoadMonitor(name: "test", period: .default, stepCount: 2, readTicks: reader.read, sleep: sleeper.sleep)
+		let monitor = LoadMonitor(name: "test", period: .default, sampleCount: 2, readTicks: reader.read, sleep: sleeper.sleep)
 		monitor.resume()
-		monitor.setStepCount(4)
+		monitor.setSampleCount(4)
 		let resized = monitor.state
-		monitor.setStepCount(4)
+		monitor.setSampleCount(4)
 
-		#expect(resized.stepCount == 4)
-		#expect(resized.histories == [LoadHistory(stepCount: 4), LoadHistory(stepCount: 4)])
+		#expect(resized.sampleCount == 4)
+		#expect(resized.histories == [LoadHistory(sampleCount: 4), LoadHistory(sampleCount: 4)])
 		#expect(monitor.state == resized)
 	}
 

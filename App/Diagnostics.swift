@@ -32,17 +32,17 @@ enum Diagnostics {
 		}
 	}
 
-	///	Written whenever a monitor's step count changes.
-	static func logStepCount(monitor: String, _ stepCount: Int) {
-		logger.debug("[\(monitor, privacy: .public)] Step count \(stepCount)")
+	///	Written whenever a monitor's sample count changes.
+	static func logSampleCount(monitor: String, _ sampleCount: Int) {
+		logger.debug("[\(monitor, privacy: .public)] Sample count \(sampleCount)")
 	}
 
-	///	Written when a monitor's sampling starts, with the CPU count and the step count, and when it stops.
-	static func logSampling(monitor: String, isStarting: Bool, cpuCount: Int, stepCount: Int) {
+	///	Written when a monitor's sampling starts, with the CPU count and the sample count, and when it stops.
+	static func logSampling(monitor: String, isStarting: Bool, cpuCount: Int, sampleCount: Int) {
 		if isStarting {
-			logger.debug("[\(monitor, privacy: .public)] Sampling started: \(cpuCount) CPUs, step count \(stepCount)")
+			logger.debug("[\(monitor, privacy: .public)] Sampling started: \(cpuCount) CPUs, sample count \(sampleCount)")
 		} else {
-			logger.debug("[\(monitor, privacy: .public)] Sampling stopped; history dropped at step count \(stepCount)")
+			logger.debug("[\(monitor, privacy: .public)] Sampling stopped; history dropped at sample count \(sampleCount)")
 		}
 	}
 
