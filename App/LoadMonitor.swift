@@ -52,37 +52,37 @@ import Observation
 	private var sampleIndex = 0
 
 	///	Makes a monitor that is not yet sampling: no history, no baseline, no loop until `resume()`.
-	init(name: String, period: SamplingPeriod, stepCount: Int, readTicks: @escaping TickReader = readProcessorTicks, sleep: @escaping Sleep = { try await Task.sleep(until: $0, clock: .continuous) }) {
+	init(name: String, period: SamplingPeriod, sampleCount: Int, readTicks: @escaping TickReader = readProcessorTicks, sleep: @escaping Sleep = { try await Task.sleep(until: $0, clock: .continuous) }) {
 		self.name = name
 		self.period = period
 		self.readTicks = readTicks
 		self.sleep = sleep
-		state = MonitorState(stepCount: stepCount)
+		state = MonitorState(sampleCount: sampleCount)
 	}
 
-	///	Starts sampling as the app starts: the history zeroed at the current step count, a baseline sample taken at
+	///	Starts sampling as the app starts: the history zeroed at the current sample count, a baseline sample taken at
 	///	once, synchronously, and the loop started so that the first load is one period away. Resuming while sampling
 	///	starts over the same way.
 	func resume() {
-		state = MonitorState(stepCount: state.stepCount)
+		state = MonitorState(sampleCount: state.sampleCount)
 		lastError = nil
 		sample()
 		isSampling = true
 		restart()
-		Diagnostics.logSampling(monitor: name, isStarting: true, cpuCount: state.histories.count, stepCount: state.stepCount)
+		Diagnostics.logSampling(monitor: name, isStarting: true, cpuCount: state.histories.count, sampleCount: state.sampleCount)
 	}
 
 	///	Stops sampling and drops the history: with no window to show it there is nothing to keep, and the next
-	///	`resume()` starts fresh. The step count is kept, since it is the window's width. Suspending while suspended does
+	///	`resume()` starts fresh. The sample count is kept, since it is the settings'. Suspending while suspended does
 	///	nothing.
 	func suspend() {
 		if isSampling {
 			loop?.cancel()
 			loop = nil
 			isSampling = false
-			state = MonitorState(stepCount: state.stepCount)
+			state = MonitorState(sampleCount: state.sampleCount)
 			lastError = nil
-			Diagnostics.logSampling(monitor: name, isStarting: false, cpuCount: 0, stepCount: state.stepCount)
+			Diagnostics.logSampling(monitor: name, isStarting: false, cpuCount: 0, sampleCount: state.sampleCount)
 		}
 	}
 
@@ -92,11 +92,12 @@ import Observation
 		loop?.cancel()
 	}
 
-	///	Resizes every history. The step count flows up from the view (Design.md, section 4.2).
-	func setStepCount(_ stepCount: Int) {
-		if stepCount != state.stepCount {
-			state = state.resized(toStepCount: stepCount)
-			Diagnostics.logStepCount(monitor: name, stepCount)
+	///	Resizes every history to a new sample count, which is the history length the user set. Whoever owns that setting
+	///	sets it here; the period has no part in it, and the monitor knows no view's width (Design.md, section 4.2).
+	func setSampleCount(_ sampleCount: Int) {
+		if sampleCount != state.sampleCount {
+			state = state.resized(toSampleCount: sampleCount)
+			Diagnostics.logSampleCount(monitor: name, sampleCount)
 		}
 	}
 

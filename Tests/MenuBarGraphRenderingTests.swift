@@ -14,14 +14,15 @@ struct MenuBarGraphRenderingTests {
 
 	///	A history holding `newestFirst`, given newest first as the drawing walks it, at exactly that many steps.
 	private func history(newestFirst: [UInt32]) -> LoadHistory {
-		newestFirst.reversed().reduce(LoadHistory(stepCount: newestFirst.count)) { $0.appending(load(sixteenths: $1)) }
+		newestFirst.reversed().reduce(LoadHistory(sampleCount: newestFirst.count)) { $0.appending(load(sixteenths: $1)) }
 	}
 
-	///	Renders `graphs`, each `stepCount` steps wide, at the graph's own size at 1x, or fails the test.
-	private func grid(_ graphs: [[UInt32]]) throws -> PixelGrid {
-		let stepCount = graphs.first?.count ?? 0
-		let width = MenuBarGraph.width(cpuCount: graphs.count, stepCount: stepCount)
-		let graph = MenuBarGraph(histories: graphs.map { history(newestFirst: $0) })
+	///	Renders `graphs`, each `graphWidth` points wide, or as wide as it has samples, at the graph's own size at 1x, or
+	///	fails the test.
+	private func grid(_ graphs: [[UInt32]], graphWidth: CGFloat? = nil) throws -> PixelGrid {
+		let graphWidth = graphWidth ?? CGFloat(graphs.first?.count ?? 0)
+		let width = MenuBarGraph.width(cpuCount: graphs.count, graphWidth: graphWidth)
+		let graph = MenuBarGraph(histories: graphs.map { history(newestFirst: $0) }, graphWidth: graphWidth)
 		return try #require(PixelGrid(of: graph, width: width, height: MenuBarGraph.height, scale: 1))
 	}
 
@@ -95,10 +96,30 @@ struct MenuBarGraphRenderingTests {
 		#expect(grid.alpha(column: 10, row: 8) == endcap)
 	}
 
-	@Test func theWidthIsEveryStepWithADividerAndGapsAroundEveryGraph() async throws {
-		#expect(MenuBarGraph.width(cpuCount: 24, stepCount: 60) == 1_563)
-		#expect(MenuBarGraph.width(cpuCount: 1, stepCount: 60) == 68)
-		#expect(MenuBarGraph.width(cpuCount: 0, stepCount: 60) == 3)
+	//	The width is a setting, not the history's: two samples in a graph four points wide are two blocks of two, and
+	//	eight samples in it are four peaks.
+	@Test func theHistoryIsFittedToTheGraphWidth() async throws {
+		let blocks = try grid([[16, 8]], graphWidth: 4)
+		let peaks = try grid([[12, 16, 0, 8, 12, 6, 0, 0]], graphWidth: 4)
+		let plot = blocks.alpha(column: 7, row: 8)
+
+		#expect(blocks.width == 12)
+		#expect(peaks.width == 12)
+		for row in 0..<blocks.height {
+			for column in 4..<8 {
+				let block: UInt32 = column >= 6 ? 16 : 8
+				let peak: UInt32 = [0, 12, 8, 16][column - 4]
+				#expect(blocks.alpha(column: column, row: row) == (row >= (16 - Int(block)) ? plot : 0), "blocks (\(column), \(row))")
+				#expect(peaks.alpha(column: column, row: row) == (row >= (16 - Int(peak)) ? plot : 0), "peaks (\(column), \(row))")
+			}
+		}
+	}
+
+	@Test func theWidthIsEveryGraphWithADividerAndGapsAroundIt() async throws {
+		#expect(MenuBarGraph.width(cpuCount: 24, graphWidth: 30) == 843)
+		#expect(MenuBarGraph.width(cpuCount: 24, graphWidth: 60) == 1_563)
+		#expect(MenuBarGraph.width(cpuCount: 1, graphWidth: 60) == 68)
+		#expect(MenuBarGraph.width(cpuCount: 0, graphWidth: 60) == 3)
 	}
 
 }

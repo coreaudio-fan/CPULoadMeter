@@ -1,48 +1,21 @@
 import Foundation
 
-///	The sampling period: a whole number of seconds from 1 to 60.
-///
-///	The only ways to make one are the two failable initializers, so an out-of-range period cannot be constructed; the
-///	control's reject-and-revert rule is their `nil`. Design.md, sections 2.11 and 4.1.
-struct SamplingPeriod: WholeSeconds {
-
-	///	The periods the control offers as presets.
-	static let presets = [1, 2, 5, 10, 30].compactMap { SamplingPeriod(seconds: $0) }
-
-	///	The period before the user has chosen one: one second.
-	static let `default` = SamplingPeriod(checkedSeconds: 1)
-
-	///	The whole seconds a period may be.
+///	The limits of a sampling period: 1 to 60 seconds, 1 by default, which is also `top`'s default interval.
+enum SamplingPeriodLimits: SecondsLimits {
 	static let range = 1...60
+	static let presetValues = [1, 2, 5, 10, 30]
+	static let defaultValue = 1
+}
 
-	///	The period in whole seconds.
-	let seconds: Int
+///	A sampling period: a whole number of seconds from 1 to 60. The window's monitor and the menu bar's each have one.
+///	Design.md, sections 2.11 and 4.1.
+typealias SamplingPeriod = BoundedSetting<SamplingPeriodLimits>
+
+extension BoundedSetting where Limits == SamplingPeriodLimits {
 
 	///	The period as the clock measures it.
 	var duration: Duration {
-		.seconds(seconds)
-	}
-
-	///	A period of `seconds`, or `nil` if that is outside the range.
-	init?(seconds: Int) {
-		guard Self.range.contains(seconds) else {
-			return nil
-		}
-		self.init(checkedSeconds: seconds)
-	}
-
-	///	A period parsed from what the user typed: a whole number in the range, with surrounding whitespace allowed, or
-	///	`nil` for anything else, including a fraction.
-	init?(text: String) {
-		guard let seconds = Int(text.trimmingCharacters(in: .whitespacesAndNewlines)) else {
-			return nil
-		}
-		self.init(seconds: seconds)
-	}
-
-	///	The seconds, already known to be in range: the failable initializer's last step, and the default's literal.
-	private init(checkedSeconds: Int) {
-		seconds = checkedSeconds
+		.seconds(value)
 	}
 
 }

@@ -1,50 +1,39 @@
 import Foundation
 
-///	The menu bar graph's history length: a whole number of seconds from 30 to 120.
-///
-///	As with `SamplingPeriod`, the only ways to make one are the two failable initializers, so an out-of-range length
-///	cannot be constructed. What the length decides is the width of each CPU's graph: the whole periods it holds, which
-///	is its step count. Design.md, sections 2.4, 2.12, and 4.1.
-struct HistoryLength: WholeSeconds {
+///	Limits of a history length: how many samples of load a graph holds.
+protocol HistoryLimits: SettingLimits {
+}
 
-	///	The lengths the control offers as presets.
-	static let presets = [30, 60, 90, 120].compactMap { HistoryLength(seconds: $0) }
+///	The limits of the window's history: 30 to 3,600 samples, 300 by default. A window has room to show far more than the
+///	menu bar does, and the longer lengths are where several samples come to share a point.
+enum WindowHistoryLimits: HistoryLimits {
+	static let range = 30...3_600
+	static let presetValues = [60, 300, 900, 3_600]
+	static let defaultValue = 300
+}
 
-	///	The length before the user has chosen one: a minute.
-	static let `default` = HistoryLength(checkedSeconds: 60)
-
-	///	The whole seconds a length may be.
+///	The limits of the menu bar graph's history: 30 to 120 samples, 60 by default.
+enum MenuBarHistoryLimits: HistoryLimits {
 	static let range = 30...120
+	static let presetValues = [30, 60, 90, 120]
+	static let defaultValue = 60
+}
 
-	///	The length in whole seconds.
-	let seconds: Int
+///	How many samples of load the window's graphs hold. Design.md, sections 2.10, 2.11, and 4.1.
+typealias WindowHistoryLength = BoundedSetting<WindowHistoryLimits>
 
-	///	A length of `seconds`, or `nil` if that is outside the range.
-	init?(seconds: Int) {
-		guard Self.range.contains(seconds) else {
-			return nil
-		}
-		self.init(checkedSeconds: seconds)
-	}
+///	How many samples of load the menu bar graph holds. Design.md, sections 2.4, 2.12, and 4.1.
+typealias MenuBarHistoryLength = BoundedSetting<MenuBarHistoryLimits>
 
-	///	A length parsed from what the user typed: a whole number in the range, with surrounding whitespace allowed, or
-	///	`nil` for anything else, including a fraction.
-	init?(text: String) {
-		guard let seconds = Int(text.trimmingCharacters(in: .whitespacesAndNewlines)) else {
-			return nil
-		}
-		self.init(seconds: seconds)
-	}
+extension BoundedSetting where Limits: HistoryLimits {
 
-	///	The seconds, already known to be in range: the failable initializer's last step, and the default's literal.
-	private init(checkedSeconds: Int) {
-		seconds = checkedSeconds
-	}
-
-	///	The steps a graph of this length holds at `period`: the whole periods that fit, a partial one dropped, and never
-	///	fewer than one, so that a length shorter than the period still leaves a graph to see.
-	func stepCount(at period: SamplingPeriod) -> Int {
-		max(1, seconds / period.seconds)
+	///	The samples a history of this length holds, which is the setting itself. The length is in samples and not in
+	///	seconds so that the period has no part in it: the period sets how fast the samples arrive, and so how much time
+	///	the graph spans and how fast it moves, and never how finely it is drawn (Design.md, D32). How wide a sample is
+	///	drawn is no part of this either: that is the graph's width divided among the samples, which the drawing works
+	///	out (`LoadHistory.steps(count:)`).
+	var sampleCount: Int {
+		value
 	}
 
 }
