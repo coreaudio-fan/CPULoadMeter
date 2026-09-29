@@ -56,13 +56,13 @@ The menu bar is SwiftUI's default set of menus, unmodified. That provides:
 
 ### 2.4 The menu bar extra
 
-- The app places an item in the system menu bar, shown as the live graph: every CPU's load history side by side, the first CPU leftmost, with a divider between neighbors and an endcap at each end drawn the same way. Each CPU's graph is drawn by the rules of §2.8, one point per step, and is as many steps wide as the menu bar's history length holds whole periods of the menu bar's update period: 60 s of history at a 1 s period is 60 steps; 60 s at 7 s is 8, the partial period dropped; a length shorter than the period still gives one step. A divider is 3 pt wide and stands 1 pt clear of the graph on either side. The graph is 16 pt tall. With 24 CPUs at the defaults the image is 1,563 pt wide, which is accepted.
-- The graph's period and history length are settings of their own (§2.12), independent of the window's period. The graph samples on its own monitor from the moment the item appears, for the life of the process (§2.2). A change to either setting resizes every CPU's history at once, by the rules of §2.10.
+- The app places an item in the system menu bar, shown as the live graph: every CPU's load history side by side, the first CPU leftmost, with a divider between neighbors and an endcap at each end drawn the same way. Each CPU's graph is drawn by the rules of §2.8, one line for every point of its width, and every CPU's graph is the same width, which is a setting: 30 pt by default. The history it shows is fitted to that width, whatever its length: at the defaults, 60 samples in 30 points, each point the peak of two. A divider is 3 pt wide and stands 1 pt clear of the graph on either side. The graph is 16 pt tall. With 24 CPUs at the defaults the image is 843 pt wide.
+- The graph's period, history length, and width are settings of their own (§2.12), independent of the window's. The graph samples on its own monitor from the moment the item appears, for the life of the process (§2.2). A change to the period or the history length resizes every CPU's history at once, by the rules of §2.10; a change to the width redraws the item at the new width and leaves the history alone.
 - The graph is handed to the system as a template image, black and clear, which the system colors for the menu bar it is in, light or dark, and for the item's selected state. The plot is opaque; the dividers and endcaps are black at 25% opacity.
 - Its menu has two items: **Show CPULoadMeter**, which shows the main window or brings it forward, and **Settings…**. When another app is active, choosing *Show CPULoadMeter* does not bring this app to the foreground: SwiftUI has no way to activate the app, and a window of an inactive app cannot be ordered above the active app's key window. A known limitation of version 1, deferred (§8).
 - The item is always present: there is no setting to hide it. The user can remove it by command-dragging it out of the menu bar, as with any menu bar extra, and if no window is showing when that happens the system quits the app. Nothing prevents either; version 1 accepts them.
 
-*Rationale: B.1, B.18.*
+*Rationale: B.1, B.18, B.19.*
 
 ### 2.5 The main window
 
@@ -79,12 +79,12 @@ The header is pinned to the top of the window at its natural height and spans th
 
 ```
 Apple M2 Ultra · 24 cores                          Update every [  1 ][▾] seconds
-CPU usage: 8% user, 4% system, 88% idle
+CPU usage: 8% user, 4% system, 88% idle           Show the last [300][▾] seconds
 ```
 
 - **The processor's name and the number of cores.** The count is the number of CPUs the kernel reports, which is also the number of LoadViews. If the name cannot be read, the header says "Unknown CPU".
 - **The machine-wide CPU usage**, in `top`'s wording and order: user, system, and idle, as whole percentages that sum to 100. Before the first load is available the line reads `CPU usage: —`. While samples are failing it reads `CPU usage unavailable` (§2.15).
-- **The update-period control** (§2.11).
+- **The update-period control**, and below it **the history-length control** (§2.11).
 
 The header says nothing about core kinds.
 
@@ -101,13 +101,17 @@ The header says nothing about core kinds.
 
 ### 2.8 The graph
 
-- Each LoadView plots its CPU's load history as vertical lines rising from the view's bottom edge.
-- The view's width is divided into steps 1 pt wide, counted from the right edge. Step 0, at the right edge, holds the newest load; each step to its left is one sample older.
+- Each LoadView plots its CPU's load history as vertical lines rising from the view's bottom edge, one line for every point of the view's width.
+- The view's width is divided into steps 1 pt wide, counted from the right edge, and the history's samples are fitted to the steps, the newest at the right edge and the oldest at the left. The history's length in samples is set by the history length and the period (§2.10), not by the width, so the two counts are free to differ:
+  - **As many steps as samples:** each step is one sample.
+  - **More steps than samples:** a sample is a block of adjacent steps, all the same height, its edges on whole points. A view 90 pt wide showing 15 samples draws each as a block 6 pt wide. Where the width is not a whole multiple of the sample count the blocks differ by one point: 100 pt for 15 samples is blocks of 6 and 7 pt.
+  - **More samples than steps:** a step draws the peak, the highest, of the samples it stands for. Every sample counts toward exactly one step, so a spike is never lost and never drawn twice.
 - A step's line is *load × view height* tall: a load of 50% in a view 10 pt tall draws a line 5 pt tall. The scale is fixed at 0–100% and never auto-ranges. Heights are not rounded.
 - A zero load draws nothing.
-- When the view's height changes, the whole history is redrawn at the new scale.
+- When the view's size changes, the whole history is redrawn at the new scale. A change of width is a zoom: it gains and loses no history.
+- Each new sample moves the plot left by one sample's width, which is one point only where steps and samples are equal in number.
 
-*Rationale: B.3.*
+*Rationale: B.3, B.19.*
 
 ### 2.9 Load
 
@@ -120,15 +124,16 @@ The header says nothing about core kinds.
 
 ### 2.10 History
 
-- Each CPU retains exactly as many loads as its LoadView has steps. There is one step count for all CPUs, since all LoadViews share a width.
+- Each CPU retains exactly as many loads, its samples, as the history length holds whole periods: the history length divided by the period, a partial period dropped, and never fewer than one. 300 s at a 1 s period is 300 samples; 300 s at 7 s is 42. There is one sample count for all the CPUs of a graph.
 - The history starts as all zeros.
-- Each new load shifts the others one step left; the oldest is discarded.
-- When the view widens, the added steps hold zeros and are the oldest. When it narrows, the oldest loads are discarded first.
-- With no window open there is no history: sampling stops when the window is hidden and starts over when it is shown (§2.2). The step count survives: the next history starts at the count of the window's last width, or, before any window has reported one, of the stored window width, or of the first-launch window's if none has ever been stored.
-- The menu bar graph keeps a history of its own, one per CPU, as many steps long as its history length holds whole periods (§2.4). A change to either setting resizes it by the rules above: zeros at the oldest end on growth, the oldest discarded first on shrink. It starts with the item and is never dropped.
+- Each new load makes the others one sample older; the oldest is discarded.
+- A change to the history length or to the period changes the sample count. When it grows, the added samples hold zeros and are the oldest. When it shrinks, the oldest loads are discarded first.
+- The window's width has no bearing on the history. Resizing the window rescales the drawing (§2.8) and gains or loses nothing.
+- With no window open the window has no history: sampling stops when the window is hidden and starts over when it is shown (§2.2). The sample count survives, since it is the settings'.
+- The menu bar graph keeps a history of its own, one per CPU, by the same rules from its own history length and period (§2.4). It starts with the item and is never dropped.
 - Neither history is saved between launches.
 
-*Rationale: B.4, B.18.*
+*Rationale: B.4, B.18, B.19.*
 
 ### 2.11 The update period
 
@@ -136,22 +141,25 @@ The header says nothing about core kinds.
 - Its control is an editable field with an attached pop-up of presets: 1, 2, 5, 10, and 30. Choosing a preset sets the field and the period.
 - A typed entry takes effect when Return is pressed or the field loses focus. An entry that is not a whole number from 1 to 60 is rejected: the field reverts to the current period and nothing else changes. There is no alert and no beep.
 - A new period takes effect immediately: the next sample is one new period away.
-- Changing the period keeps the existing history. Steps sampled at the old period remain and simply stand for a different duration.
+- Changing the period changes how many samples the history length holds, and the history is resized by the rule of §2.10. The samples kept were taken at the old period and simply stand for a different duration.
 - The period is remembered between launches.
 - This is the window's period. The menu bar graph has one of its own, set in the settings window through the same control with the same range, presets, and rules (§2.12).
+- **The history length** is how many seconds of load the window's graphs show: a whole number of seconds from 30 to 3,600, 300 by default. Its control is of the same kind, below the period's in the header, reading *Show the last … seconds*, with presets 60, 300, 900, and 3,600, and the same commit and reject-and-revert rules. A new length takes effect immediately and is remembered between launches.
 
-*Rationale: B.2, B.9.*
+*Rationale: B.2, B.9, B.19.*
 
 ### 2.12 Settings
 
-- The settings window has the checkbox **Open main window at launch**, on by default, and below it the menu bar graph's two settings.
+- The settings window has the checkbox **Open main window at launch**, on by default, and below it the menu bar graph's three settings.
 - The checkbox always decides whether the main window opens at launch. The system does not restore the window on its own.
 - With the box unchecked, clicking the Dock icon does not show the main window. The menu bar extra and the Window menu do.
 - **Update every** is the menu bar graph's period: the same control as the window's (§2.11), with the same range of 1 to 60, the same presets 1, 2, 5, 10, and 30, the same commit and reject-and-revert rules, and the same default of 1, but a value of its own.
-- **Keep** is the menu bar graph's history length in seconds, from 30 to 120, with presets 30, 60, 90, and 120 and a default of 60, through the same control and the same rules. The two together set each CPU's graph width (§2.4); a change to either takes effect at once.
-- Both are remembered between launches.
+- **Keep** is the menu bar graph's history length in seconds, from 30 to 120, with presets 30, 60, 90, and 120 and a default of 60, through the same control and the same rules. The two together set how many samples the graph holds (§2.10).
+- **Draw each core** is the width of one CPU's graph in points, from 10 to 120, with presets 20, 30, 40, and 60 and a default of 30, through the same control and the same rules. The floor of 10 is what keeps a graph wide enough to read whatever the other two are set to.
+- A change to any of the three takes effect at once, and all three are remembered between launches.
+- Nothing yet checks one setting against another: a period as long as the history length gives a graph of one sample, drawn as one block across its width. Limits that take the settings together are later work (§8).
 
-*Rationale: B.8, B.18.*
+*Rationale: B.8, B.18, B.19.*
 
 ### 2.13 Appearance
 
@@ -238,8 +246,8 @@ kernel ──host_processor_info──▶ readProcessorTicks()                  
         LoadMonitor  @Observable @MainActor — owns the Task, the period, the state    (App)
         one for the window, one for the menu bar
              ▲                     │ observation
-  step count │                     ▼
-   MainView ─▶ HeaderView(name, total, period)  +  LoadStackView ─▶ LoadView(history) × N
+sample count │                     ▼
+   MainView ─▶ HeaderView(name, total, period, history)  +  LoadStackView ─▶ LoadView(history) × N
    MenuBarGraphLabel ─▶ MenuBarGraph(histories) ─ImageRenderer─▶ a template Image, the item's label
 ```
 
@@ -253,12 +261,14 @@ kernel ──host_processor_info──▶ readProcessorTicks()                  
 | `TickDelta` | The ticks that elapsed between two samples: user (with nice folded in), system, and idle. One CPU's, or the sum of several | The per-CPU initializer takes two `CPUTicks` and subtracts in 32 bits with wrapping arithmetic before widening, so a counter wrap is harmless by construction. Deltas add, in 64 bits, which is how the machine-wide figure is formed. |
 | `CPULoad` | `user` and `system` fractions; `total` computed; `CPULoad.zero` | Each in 0…1 and `total` ≤ 1. Apart from `zero`, the only initializer takes a `TickDelta`, so the invariant holds by construction. A delta of zero ticks yields `zero`. |
 | `UsagePercentages` | The header's three whole percentages: user, system, idle | Each in 0…100, summing to exactly 100. The only initializer takes a `CPULoad` and rounds cumulatively (§5.4). |
-| `LoadHistory` | One CPU's retained loads, oldest first | **Always exactly `stepCount` loads.** `init(stepCount:)` is all zeros. `appending(_:)` drops the oldest and adds the newest, so the length cannot change. `resized(toStepCount:)` prepends zeros to grow and keeps the newest suffix to shrink. All three return new values. |
-| `SamplingPeriod` | Whole seconds; `presets`; `default` | 1…60, through failable initializers only — `init?(seconds:)` and `init?(text:)`. There is no way to construct an out-of-range period. |
-| `HistoryLength` | The menu bar graph's whole seconds of history; `presets`; `default`; `stepCount(at:)` | 30…120, through the same two failable initializers. The step count at a period is the whole periods the length holds, a partial one dropped, and never fewer than one. |
-| `MonitorState` | The previous ticks, one `LoadHistory` per CPU, and the latest machine-wide load | `advanced(with: [CPUTicks])` is the entire per-sample logic as one pure function. `resized(toStepCount:)` maps the resize over every history. A change in the CPU count resets the baseline and replaces the histories with zeros at the current step count; the first sample is the same rule, going from no CPUs to N. |
+| `LoadHistory` | One CPU's retained loads, oldest first | **Always exactly `sampleCount` loads.** `init(sampleCount:)` is all zeros. `appending(_:)` drops the oldest and adds the newest, so the length cannot change. `resized(toSampleCount:)` prepends zeros to grow and keeps the newest suffix to shrink. All three return new values. `steps(count:)` is the history fitted to a graph's steps, newest first, by the rule of §5.5. |
+| `BoundedSetting<Limits>` | A setting held within its limits: a whole number; `presets`; `default` | Within `Limits.range`, through failable initializers only — `init?(value:)` and `init?(text:)`. There is no way to construct an out-of-range setting. `Limits` is a type that is never instantiated, a name for a range, a list of presets, and a default; a setting under one set of limits cannot be passed where another is expected. |
+| `SamplingPeriod` | `BoundedSetting` under the period's limits; `seconds`; `duration` | 1…60, default 1. |
+| `WindowHistoryLength`, `MenuBarHistoryLength` | `BoundedSetting` under each history's limits; `seconds`; `sampleCount(at:)` | 30…3,600 with a default of 300, and 30…120 with a default of 60. The sample count at a period is the whole periods the length holds, a partial one dropped, and never fewer than one. |
+| `GraphWidth` | `BoundedSetting` under the width's limits; `points` | 10…120, default 30. |
+| `MonitorState` | The previous ticks, one `LoadHistory` per CPU, and the latest machine-wide load | `advanced(with: [CPUTicks])` is the entire per-sample logic as one pure function. `resized(toSampleCount:)` maps the resize over every history. A change in the CPU count resets the baseline and replaces the histories with zeros at the current sample count; the first sample is the same rule, going from no CPUs to N. |
 
-`SamplingPeriod` and `HistoryLength` share the `WholeSeconds` protocol — the seconds, the presets, and the parse from text — which is what their one control is generic over (§5.9).
+The four settings are one generic type because they share every mechanic and differ only in their numbers; their one control is generic over the limits (§5.9). What is particular to a kind of setting is an extension constrained to its limits: `seconds` on those measured in seconds, `sampleCount(at:)` on the history lengths, `duration` on the period, `points` on the width.
 
 The scheduling rule is pure as well: given the previous deadline, the period, and the present instant, `nextDeadline` returns the following deadline, collapsing any that were missed (§5.8).
 
@@ -266,11 +276,11 @@ Two impure readers complete the core: `readProcessorTicks()` (§5.6) and `readPr
 
 ### 4.2 The shell
 
-`LoadMonitor` is an `@Observable`, `@MainActor` class. It owns the sampling task, the period, the current `MonitorState`, and the last error. It is created and owned by the `App`, not by any view, so its lifetime is the process's; but it samples only between `resume()` and `suspend()`. There are two: the window's, which its root view resumes and suspends as the window appears and disappears, and the menu bar's, which the extra's label resumes when it appears and nothing suspends, with a period and a step count of its own (§2.4, §5.1, §5.8). Each carries a name for the diagnostics.
+`LoadMonitor` is an `@Observable`, `@MainActor` class. It owns the sampling task, the period, the current `MonitorState`, and the last error. It is created and owned by the `App`, not by any view, so its lifetime is the process's; but it samples only between `resume()` and `suspend()`. There are two: the window's, which its root view resumes and suspends as the window appears and disappears, and the menu bar's, which the extra's label resumes when it appears and nothing suspends, with a period and a sample count of its own (§2.4, §5.1, §5.8). Each carries a name for the diagnostics.
 
 - **Its two collaborators are passed in.** The tick reader is an initializer parameter of type `@MainActor () throws(MachError) -> [CPUTicks]`, defaulting to `readProcessorTicks`. The sleep is a second, of type `@MainActor (ContinuousClock.Instant) async throws -> Void`, defaulting to `Task.sleep(until:clock:)` on the continuous clock. Both types say `@MainActor` because the monitor calls both from the main actor, and a scripted collaborator may then keep main-actor state; a nonisolated function such as the real reader converts to either. With both scripted, the monitor's whole behavior — what it does with a failed read, with a changed CPU count, with a new period — is exercised deterministically and without waiting on a real clock.
 - **It persists nothing.** The `App` reads the stored period, hands it to the monitor, and stores it again when it changes. The monitor's tests run inside the app and share its real defaults, so a monitor that wrote its own period could change the user's setting during a test run.
-- **The step count flows up from the view.** `LoadStackView` measures its width, converts it to a step count with `LoadGraph.stepCount(forWidth:)`, and reports it to the monitor, which resizes its state. This is the one place the model depends on view geometry, and it does so by design (§2.10).
+- **The model knows nothing of view geometry.** The monitor holds a sample count, which whoever owns the settings works out from the history length and the period and sets: `MainWindowContent` for the window's monitor, `MenuBarGraphLabel` for the menu bar's. No view reports its width to the model; the drawing fits whatever history it is handed to whatever width it has (§5.5).
 - **Views take values, not the monitor.** A parent view reads what it needs from the monitor in its `body` and passes plain values down; `LoadView` receives one `LoadHistory`. That parent is `MainWindowContent`, the window's root view, and for the menu bar's monitor `MenuBarGraphLabel`, the extra's label; never the `App` itself: reading a monitor in a scene body re-evaluates the scenes, and rebuilds the menus, on every sample (§5.1).
 
 *Rationale: B.4 (history), B.16 (the injected reader), B.17 (the injected sleep; no persistence).*
@@ -334,13 +344,13 @@ There is no `import AppKit` and no app delegate.
 - The first-launch size (§2.5) is therefore not a constant computed ahead of layout, which would need the header's height before the header exists. It is the content's own ideal size: `MainView` has an ideal width of 480 pt and each `LoadView` an ideal height of 20 pt, and the header contributes its natural height.
 - Within one run nothing more is needed: a closed window's object survives, hidden, and reopens as it was.
 
-The `App`'s initializer creates both monitors: the window's with the stored period and the initial step count (§2.10), and the menu bar's with its stored period and history length, at the step count the two imply. `MainWindowContent` stores the window's period again whenever the monitor's changes, and resumes the monitor when it appears and suspends it when it disappears, which is what confines the window's sampling to the time the window is shown (§2.2). The settings window stores the menu bar's two settings, and `MenuBarGraphLabel` applies them (§5.2).
+The `App`'s initializer creates both monitors: each with its stored period, at the sample count its stored history length implies at that period (§2.10). `MainWindowContent` stores the window's period again whenever the monitor's changes, holds the window's history length, gives the monitor the sample count the two imply whenever either changes, and resumes the monitor when it appears and suspends it when it disappears, which is what confines the window's sampling to the time the window is shown (§2.2). The settings window stores the menu bar's two settings, and `MenuBarGraphLabel` applies them (§5.2).
 
 *Rationale: B.1, B.8, B.17 (the first-launch size). Experiments: D.2.*
 
 ### 5.2 The menu bar extra's label and menu
 
-**The label** is `MenuBarGraphLabel`, the extra's root view and the one place the menu bar's monitor is read. On every re-evaluation — every sample — it renders `MenuBarGraph` with the monitor's histories through `ImageRenderer` at the display's scale and shows the result as `Image(decorative:scale:)` in template rendering mode; with nothing to render it shows the `cpu` symbol instead. It resumes the monitor when it appears, and when either stored setting changes it applies both to the monitor: the period, if it differs, since setting an equal period would still restart the loop, and the step count the two imply.
+**The label** is `MenuBarGraphLabel`, the extra's root view and the one place the menu bar's monitor is read. On every re-evaluation — every sample — it renders `MenuBarGraph` with the monitor's histories, at the stored graph width, through `ImageRenderer` at the display's scale and shows the result as `Image(decorative:scale:)` in template rendering mode; with nothing to render it shows the `cpu` symbol instead. It resumes the monitor when it appears, and when the stored period or history length changes it applies both to the monitor: the period, if it differs, since setting an equal period would still restart the loop, and the sample count the two imply. The width bears on the drawing alone, and the monitor never hears of it.
 
 An image, rather than the canvas itself, because a `MenuBarExtra`'s label is realized as the status item button's image: a `Canvas` given as the label draws nothing and leaves the item 16 pt wide with no image at all, while an `Image` becomes the button's image and is replaced on every re-evaluation (D24; D.6). A template image is what the guidelines ask of a menu bar extra's image, and it is what makes the colors the system's (§2.13).
 
@@ -357,7 +367,7 @@ MainView            VStack(spacing: 0)
 ├─ HeaderView         natural height (.fixedSize vertical), full width
 ├─ hairline
 └─ LoadStackView      one Canvas, fills the remainder; one row per LoadView, minHeight 8 each; hairlines on the
-                      row boundaries; reports its step count
+                      row boundaries
 ```
 
 There is no `ScrollView` anywhere. The window's minimum size emerges from the content's minimums through the default `contentMinSize` resizability. Equal division can land on fractional points, so adjacent LoadViews may differ in height by one pixel.
@@ -366,7 +376,7 @@ There is no `ScrollView` anywhere. The window's minimum size emerges from the co
 
 ### 5.4 The header
 
-`HeaderView` takes the processor name, the CPU count, the latest machine-wide `CPULoad` (optional), whether the last sample failed, and a binding to the period. The name is read once at launch.
+`HeaderView` takes the processor name, the CPU count, the latest machine-wide `CPULoad` (optional), whether the last sample failed, and bindings to the period and the history length. The name is read once at launch. Its two lines each end in a control, so the window is at least as wide as the wider line: the usage text beside the history control.
 
 The three whole percentages come from `UsagePercentages`, which rounds cumulatively: *busy* is user plus system rounded to the nearest whole percent; *user* is user rounded; *system* is busy minus user; *idle* is 100 minus busy. Every figure is therefore non-negative and the three always sum to 100.
 
@@ -378,7 +388,7 @@ The drawing is a pure function of its input: `LoadStackView` takes every CPU's `
 
 ```swift
 static func appendLines(of history: LoadHistory, to path: inout Path, in rect: CGRect, lineWidth: CGFloat) {
-	let steps = history.loads.reversed().prefix(LoadGraph.stepCount(forWidth: rect.width)).enumerated()
+	let steps = history.steps(count: LoadGraph.stepCount(forWidth: rect.width)).enumerated()
 	for step in steps {
 		let x = rect.maxX - (CGFloat(step.offset) * LoadGraph.stepLength) - (lineWidth / 2)
 		path.move(to: CGPoint(x: x, y: rect.maxY))
@@ -387,18 +397,27 @@ static func appendLines(of history: LoadHistory, to path: inout Path, in rect: C
 }
 ```
 
-`MenuBarGraph` draws with the same function in one `Canvas` of its own. From the left: a divider slot, a 1 pt gap, CPU 0's graph, a gap, a divider slot, a gap, CPU 1's graph, and so on, ending with a divider slot after the last graph, so that the first and last slots are the endcaps. A slot is 3 pt wide and full height, black at 25% opacity over an opaque black plot, since the image is a template (§2.4); the pitch from one slot to the next is *3 + 1 + steps + 1*, CPU *i*'s graph sits at *i × pitch + 4*, and the width is *CPUs × pitch + 3*: 1,563 pt for 24 CPUs at 60 steps.
+`MenuBarGraph` draws with the same function in one `Canvas` of its own. From the left: a divider slot, a 1 pt gap, CPU 0's graph, a gap, a divider slot, a gap, CPU 1's graph, and so on, ending with a divider slot after the last graph, so that the first and last slots are the endcaps. A slot is 3 pt wide and full height, black at 25% opacity over an opaque black plot, since the image is a template (§2.4); the pitch from one slot to the next is *3 + 1 + width + 1*, where *width* is the graph-width setting, CPU *i*'s graph sits at *i × pitch + 4*, and the image's width is *CPUs × pitch + 3*: 843 pt for 24 CPUs at the default 30 pt.
+
+**Fitting the history to the steps** is `LoadHistory.steps(count:)`, a pure function in the core. With *N* samples and *W* steps, both counted from the newest:
+
+- Sample *n*'s center is at *(n + ½) × W ÷ N* on the steps' axis, and the sample belongs to the step its center falls in. Every sample therefore belongs to exactly one step.
+- A step draws the peak, by total load, of the samples that belong to it. The winning sample arrives whole, its user and system fractions with it.
+- A step that no sample belongs to, which happens only where *W* exceeds *N*, draws the sample that its own center, at *(c + ½) × N ÷ W*, falls in.
+- At *N = W* both rules give each step its own sample, so the drawing of version 1 is the special case.
+
+The arithmetic is in whole numbers: the first sample belonging to step *c* or a later one is *(2Nc + W − 1) ÷ 2W*, rounded down, and the sample at step *c*'s center is *(2c + 1) × N ÷ 2W*, rounded down. No rounding of a fraction decides where a block's edge falls.
 
 The drawing rules:
 
-- **The walk starts at the bottom-right.** Step 0 is the newest load; each later step is one `stepLength` further left. `reversed()` puts the newest first, and `prefix` covers the frame or two during a live resize when the history has not yet caught up with the view.
+- **The walk starts at the bottom-right.** Step 0 is the newest; each later step is one `stepLength` further left. There are always as many steps as the rectangle has whole points of width.
 - **The y-axis points down.** The row's bottom edge is `rect.maxY`, and a full-height line ends at `rect.minY`.
 - **A line's center is a pixel boundary plus half the line width.** The right edge of step *k*'s line sits at `width − k × stepLength`, a whole point, and the center is half a line width to its left.
 - **One path and one stroke** for every LoadView per redraw, and one fill for the hairlines.
 - **`stepLength` is 1 pt. `lineWidth` defaults to 1 pt**, which tiles the steps into a solid silhouette; the default's final value is chosen by eye against the running app (§8). It is a parameter of `LoadStackView` and of `MenuBarGraph` rather than a constant so that the rendering tests can exercise more than one width, and so that the menu bar graph could take a width of its own; it draws at 1 pt too.
-- **`stepLength` lives in the core**, as `LoadGraph.stepLength`, with `LoadGraph.stepCount(forWidth:)` beside it: the view that draws, the view that measures its width, and the app when it starts the monitor from a stored width all read the same constant. In the core it needs no isolation annotation, where a `View`'s static constant would, since a `View` is main-actor-isolated through the protocol and `LoadStackView` reads it inside `onGeometryChange`'s `@Sendable` transform.
+- **`stepLength` lives in the core**, as `LoadGraph.stepLength`, with `LoadGraph.stepCount(forWidth:)` beside it, where the two canvases that draw with them both reach them.
 
-*Rationale: B.3.*
+*Rationale: B.3, B.19.*
 
 ### 5.6 The kernel readers
 
@@ -434,42 +453,44 @@ load  = total == 0 ? 0 : busy / total      as CPULoad { user, system }; nice cou
 
 ### 5.8 Scheduling
 
-`LoadMonitor` owns one `Task` that loops: sleep until a deadline on a monotonic clock, sample, advance the deadline by the period. `resume()` zeroes the history at the current step count, takes the baseline synchronously, and starts the loop; `suspend()` cancels the loop and drops the history, keeping the step count; a period set while suspended waits for the next `resume()`. A cancellation can land after a sleep has ended and before that iteration runs, since both queue on the main actor, so the loop checks for cancellation after waking as well. If the new deadline is already past, it is reset to *now + period*, so missed deadlines collapse into one sample. Changing the period cancels the task and starts a new one, which is the whole of "takes effect immediately". There are two monitors, and each runs this loop for itself. The deadline rule is the pure function `nextDeadline` (§4.1), and the sleep is the injected one (§4.2), so the loop itself has no branches.
+`LoadMonitor` owns one `Task` that loops: sleep until a deadline on a monotonic clock, sample, advance the deadline by the period. `resume()` zeroes the history at the current sample count, takes the baseline synchronously, and starts the loop; `suspend()` cancels the loop and drops the history, keeping the sample count; a period set while suspended waits for the next `resume()`. A cancellation can land after a sleep has ended and before that iteration runs, since both queue on the main actor, so the loop checks for cancellation after waking as well. If the new deadline is already past, it is reset to *now + period*, so missed deadlines collapse into one sample. Changing the period cancels the task and starts a new one, which is the whole of "takes effect immediately". There are two monitors, and each runs this loop for itself. The deadline rule is the pure function `nextDeadline` (§4.1), and the sleep is the injected one (§4.2), so the loop itself has no branches.
 
 The sample runs on the main actor. It moves off the main actor only if measurement says it should (§7, P7).
 
-**Diagnostics.** The app writes four kinds of debug-level message with `os.Logger`, under its bundle identifier as the subsystem: one at launch, with the processor's name and the CPU count; one per sample, with numeric fields only — the sample's index, how late it was, how long it took, the CPU count, and the machine-wide user, system, and idle tick deltas; one whenever the step count changes; and one when sampling starts, with the CPU count and the step count, or stops. Every message but the launch line names its monitor in brackets — `[window]` or `[menu bar]` — so the two streams can be told apart. They are ordinary diagnostics, present in every build; debug-level messages are not persisted and cost almost nothing when no one is listening. They are how the cadence, the cost, and the agreement with `top` are observed from a shell (§7).
+**Diagnostics.** The app writes four kinds of debug-level message with `os.Logger`, under its bundle identifier as the subsystem: one at launch, with the processor's name and the CPU count; one per sample, with numeric fields only — the sample's index, how late it was, how long it took, the CPU count, and the machine-wide user, system, and idle tick deltas; one whenever a monitor's sample count changes; and one when sampling starts, with the CPU count and the sample count, or stops. Every message but the launch line names its monitor in brackets — `[window]` or `[menu bar]` — so the two streams can be told apart. They are ordinary diagnostics, present in every build; debug-level messages are not persisted and cost almost nothing when no one is listening. They are how the cadence, the cost, and the agreement with `top` are observed from a shell (§7).
 
 *Rationale: B.9, B.17 (the diagnostics).*
 
-### 5.9 The period control
+### 5.9 The setting control
 
-`SecondsControl` is a composed combo box, generic over `WholeSeconds`: a narrow `TextField` bound to a draft string, and beside it a borderless `Menu` whose items are the type's `presets`. The header instantiates it for the window's `SamplingPeriod`; the settings window, once for the menu bar's `SamplingPeriod` and once for its `HistoryLength`, so that "the same control and the same rules" is one type.
+`SettingControl` is a composed combo box, generic over a setting's limits: a narrow `TextField` bound to a draft string, and beside it a borderless `Menu` whose items are the setting's `presets`. The header instantiates it for the window's period and history length; the settings window, for the menu bar's period, history length, and graph width; so that "the same control and the same rules" is one type. The words before and after the field are its parameters.
 
 - **Commit** happens on Return (`onSubmit`) and when the field loses focus (`@FocusState`). The draft is parsed through the type's `init?(text:)`: either a value comes out, or the draft reverts to the current one.
-- **Nothing else in the window can take focus**, so a click elsewhere would leave the field editing. The main view owns the focus state and clears it when the graphs or the header's text are clicked, which is what makes a click elsewhere commit; the settings view owns one per field and clears both on a click on the form.
+- **Nothing else in the window can take focus**, so a click elsewhere would leave the field editing. The main view owns a focus state for each of the header's two fields and clears both when the graphs or the header's text are clicked, which is what makes a click elsewhere commit; the settings view owns one per field and clears all three on a click on the form.
 - **Switching to another window or app is not a focus loss.** The draft waits, uncommitted, until the user returns and decides — as in every Mac app.
-- **A preset pick** sets the period directly and rewrites the draft.
+- **A preset pick** sets the value directly and rewrites the draft.
 - **The draft is a string**, not `TextField(value:format:)`, so that the parse and the reject-and-revert rule live in one visible place.
 
 *Rationale: B.2.*
 
 ### 5.10 Settings and persistence
 
-Six `UserDefaults` keys, through `@AppStorage`:
+Eight `UserDefaults` keys, through `@AppStorage`:
 
 | Key | Type | Default | Read through |
 |---|---|---|---|
 | `isMainWindowOpenedAtLaunch` | `Bool` | `true` | directly |
 | `samplingPeriodSeconds` | `Int` | `1` | `SamplingPeriod.init?(seconds:)`; an invalid stored value falls back to the default |
-| `mainWindowWidth` | `Double?` | absent | with its partner; both present, or the first-launch size is used |
+| `historySeconds` | `Int` | `300` | `WindowHistoryLength.init?(seconds:)`; likewise |
+| `mainWindowWidth` | `Double?` | absent | with its partner; both present, or the first-launch size is used. It sizes the window and nothing else |
 | `mainWindowHeight` | `Double?` | absent | as above |
-| `menuBarPeriodSeconds` | `Int` | `1` | `SamplingPeriod.init?(seconds:)`; an invalid stored value falls back to the default |
-| `menuBarHistorySeconds` | `Int` | `60` | `HistoryLength.init?(seconds:)`; likewise |
+| `menuBarPeriodSeconds` | `Int` | `1` | `SamplingPeriod.init?(seconds:)`; likewise |
+| `menuBarHistorySeconds` | `Int` | `60` | `MenuBarHistoryLength.init?(seconds:)`; likewise |
+| `menuBarGraphWidth` | `Int` | `30` | `GraphWidth.init?(value:)`; likewise |
 
-All six are read and written by the `App`, the settings view, and the two root views. The monitors and the core touch no defaults (§4.2).
+All eight are read and written by the `App`, the settings view, and the two root views. The monitors and the core touch no defaults (§4.2).
 
-`SettingsView` is a `Form`: the `Toggle`, and a section holding the two `SecondsControl`s, each bound to its stored value through the type's `init?(seconds:)`, an invalid stored value reading as the default. Neither load history nor the window's position is persisted.
+`SettingsView` is a `Form`: the `Toggle`, and a section holding the three `SettingControl`s, each bound to its stored value through the setting's failable initializer, an invalid stored value reading as the default. Neither load history nor the window's position is persisted.
 
 ### 5.11 Colors
 
@@ -498,10 +519,12 @@ swift-testing, with `@testable import CPULoadMeter`, hosted in the app. A test r
 - **`CPULoad`** stays within its bounds.
 - **`UsagePercentages`** always sums to 100 with no negative figure, including user 0.5% with system 99.5%, where rounding each independently would not.
 - **`nextDeadline`:** the ordinary advance, and the collapse of missed deadlines.
-- **`LoadHistory`:** fixed length under append; zero-fill at the *oldest* end on growth; oldest-first loss on shrink; identity on a same-size resize; a zero step count.
+- **`LoadHistory`:** fixed length under append; zero-fill at the *oldest* end on growth; oldest-first loss on shrink; identity on a same-size resize; a zero sample count.
+- **Fitting the history to the steps:** the identity at equal counts; a whole multiple of steps, every sample a block that wide; an uneven fit, 15 samples in 100 steps giving blocks of 6 and 7 that fill the width in order; a whole multiple of samples, the peak of each group; an uneven fit the other way, where a lone spike shows in exactly one step wherever it sits; one sample filling every step; no steps or no samples; and the peak chosen by total load with its fractions intact.
 - **`SamplingPeriod`:** the boundaries 0, 1, 60, and 61, and unparseable text.
-- **`HistoryLength`:** the boundaries 29, 30, 120, and 121, unparseable text, and the step count: whole periods, a partial one dropped, and never fewer than one.
-- **`SecondsControl`'s commit rule**, `committedValue(from:current:)`, for both types: in range commits, everything else reverts.
+- **Every setting**, through the one generic: both ends of its range are values and one past either is not; unparseable text is rejected; the default is within the range; the presets are within it, ascending, and none is dropped; and the limits are the numbers specified.
+- **The history lengths' sample count:** whole periods, a partial one dropped, and never fewer than one.
+- **`SettingControl`'s commit rule**, `committedValue(from:current:)`, under each setting's limits: in range commits, everything else reverts.
 - **`MonitorState.advanced`:** first sample, steady state, and a change in the CPU count.
 
 **The monitor**, driven through its injected reader and sleep: a failed read keeps the last good sample; a changed CPU count resets the baseline; a new period restarts the loop, which is asserted on the next deadline the monitor asks to sleep until. No test waits on a real clock.
@@ -512,7 +535,7 @@ swift-testing, with `@testable import CPULoadMeter`, hosted in the app. A test r
 
 **One test stands in for an invariant the compiler cannot check.** "Every reply buffer is freed" is not expressible in the type system, so a runtime check guards it and says so: the test calls `readProcessorTicks()` a few thousand times and requires the physical footprint (`task_info`, `TASK_VM_INFO`) to grow by less than a bound well under what the leak would cost. The bound is wide, because the host process is busy; the test is proved able to fail by removing the `vm_deallocate` once.
 
-**The drawing** is tested on its pixels. `ImageRenderer` renders a `LoadView` at a fixed size, at scales 1 and 2, and the tests compare the alpha of every pixel against the pattern §5.5 predicts: which pixels each step's line covers, that a zero load draws nothing, that the newest load is anchored to the right edge, and what a 0.5 pt line does at each scale. The reference alpha is measured from a full-height line rather than assumed. `MenuBarGraph` is tested the same way, at its own 16 pt height, where a sixteenth of load is one pixel at 1x: two CPUs side by side with the first leftmost, the divider column between them fainter than the plot, and the width rule. What these cannot see is where the canvas sits in the real window, or what the system makes of the template image in the menu bar, which stay checks by eye (§7, P4 and P15). When validating against `top` by eye, note that `top` prints 76.06% as `76.6%`.
+**The drawing** is tested on its pixels. `ImageRenderer` renders a `LoadView` at a fixed size, at scales 1 and 2, and the tests compare the alpha of every pixel against the pattern §5.5 predicts: which pixels each step's line covers, that a zero load draws nothing, that the newest load is anchored to the right edge, and what a 0.5 pt line does at each scale. The reference alpha is measured from a full-height line rather than assumed. The cases that test the drawing give the view as many samples as points, so that each line is its own sample; the fitting has pixel cases of its own: fewer samples than points drawn as blocks, an uneven fit drawn as blocks on whole points, and more samples than points drawn as peaks. `MenuBarGraph` is tested the same way, at its own 16 pt height, where a sixteenth of load is one pixel at 1x: two CPUs side by side with the first leftmost, the dividers and endcaps fainter than the plot with a clear point either side, a history fitted to a graph width that differs from its sample count, and the width rule. What these cannot see is where the canvas sits in the real window, or what the system makes of the template image in the menu bar, which stay checks by eye (§7, P4 and P15). When validating against `top` by eye, note that `top` prints 76.06% as `76.6%`.
 
 *Rationale: B.10, B.16, B.17. Prior art: C.2. Seed code: D.4.*
 
@@ -528,15 +551,16 @@ The design leans on some platform behavior that is recalled or documented but no
 | **P12** | *Confirmed 2026-09-21 (D.6).* Tests hosted in the app run at all. The settings (`TEST_HOST`, `BUNDLE_LOADER`) are the known part; the open part is whether the **hardened runtime** lets Xcode inject the test bundle into a sandboxed host, which no sibling project does. If it does not, the recourse to discuss is a Debug-only build-setting exception that leaves the sandbox, the hardened runtime, and Release untouched. Also: the core's declarations compile as `nonisolated` under the app target's `MainActor` default. | §3, §4.1, §6 |
 | **P13** | *Confirmed 2026-09-21 except one item (D.6): the extra can be removed by command-drag, which the documentation allows, and doing so with no window showing quits the app, which the documentation says; both are accepted (D20). The others held.* `SettingsLink` works inside the extra's menu; the extra cannot be removed from the menu bar by the user; the traffic-light buttons remain under the hidden title bar, and the header sits clear of them; the About panel shows the icon, name, version, and copyright. | §2.3–§2.5, §5.2 |
 | **P9** | *Failed 2026-09-21 and deferred (D19, D.6): selecting the item while another app was frontmost did not bring this app to the foreground; the bare `NSApplication.activate()` changed nothing; the cooperative `NSRunningApplication.activate(from:options:)` worked with a Finder window in front and with no other app's. Both were rolled back; the limitation is documented in §2.4, §5.2, and §8.* A window opened from the extra's menu comes forward while another app is active. | §2.4, §5.2 |
-| **P14** | *Confirmed 2026-09-22 (D.6): the step count flows up, and the one transient layout before the window is placed is gated out; the resize half awaits a hand check.* `onGeometryChange` delivers the width `LoadStackView` needs; if not, a `GeometryReader` does. A history read in a parent's `body` and passed down redraws the `LoadView` when it changes. | §4.2, §5.5 |
+| **P14** | *Superseded 2026-09-29 (D28): the view reports nothing to the model, which takes its sample count from the settings. As first run:* *Confirmed 2026-09-22 (D.6): the step count flows up, and the one transient layout before the window is placed is gated out; the resize half awaits a hand check.* `onGeometryChange` delivers the width `LoadStackView` needs; if not, a `GeometryReader` does. A history read in a parent's `body` and passed down redraws the `LoadView` when it changes. | §4.2, §5.5 |
 | **P4** | *Confirmed 2026-09-22 (D.6): crisp at 2×, zero loads invisible, the shortest lines fine by eye; the stroke stays at 1 pt (D17).* Strokes are crisp at 1× and 2× — the canvas's origin sits on a pixel boundary; a zero load draws nothing; unrounded heights do not leave soft top edges. Choose the final `lineWidth` here. | §2.8, §5.5 |
 | **P5** | *Confirmed 2026-09-22 after one fix (D.6): a click elsewhere had to be made a focus loss, and switching apps is deliberately not one.* The period control commits on Return and on focus loss, rejects and reverts, and takes presets, as specified. | §2.11, §5.9 |
 | **P6** | *Confirmed 2026-09-22 (D.6); the windowless half superseded by D23, since sampling no longer runs with no window: windowless, and through a ten-second live resize and a ten-second menu hold, with no interval over 1.07 s at a 1 s period.* Sampling continues during live resize and menu tracking. Observe the cadence with the window closed and only the extra showing. Read from the per-sample log message (§5.8): intervals that match the period, and no gap beyond one and a half periods. | §2.2, §5.8 |
 | **P7** | *Confirmed 2026-09-22 (D.6): about 4% of one core at 3,072 steps × 24 CPUs once a second, 0.76 ms per sample; sampling stays on the main actor.* Redraw and sampling cost at full display width: the per-sample duration from the log, and the app's own CPU share from `top`, with the stored window width preset to the display's. Instruments where it helps. Decide whether sampling stays on the main actor. | §5.5, §5.8 |
 | **P8** | *Confirmed 2026-09-21 (D.6).* *Re-confirmed by the regression test:* no leak from the kernel's reply buffer. | §5.6, §6 |
 | **P10** | *Answered 2026-09-24 (D24, D.6): a `Canvas` label draws nothing and leaves the item with no image; an `Image` label becomes the item's image and is replaced on every body evaluation; template rendering marks it a template. The graph is rendered to an image on each sample.* Whether a `MenuBarExtra`'s label can host a live `Canvas`. The fallbacks are rendering the graph to an `Image` on each sample, or an `NSStatusItem`. | §2.4, §5.2 |
-| **P15** | *Hand check.* The live graph in the menu bar: every CPU side by side, CPU 0 leftmost, a divider between; colored for Light and Dark and for the selected item; the extra's menu stays put while the label updates; a change to the period or the history length changes the width at once, and both survive a relaunch; the item's width at the defaults, 1,579 pt, sits in the menu bar without trouble. *Held on the first build but for the look of the dividers, which were then chosen from a sampler (D.6); the re-check is of that.* | §2.4, §2.12, §5.2 |
+| **P15** | *Hand check.* The live graph in the menu bar: every CPU side by side, CPU 0 leftmost, a divider between; colored for Light and Dark and for the selected item; the extra's menu stays put while the label updates; a change to the period or the history length changes the width at once, and both survive a relaunch; the item's width at the defaults, 1,579 pt, sits in the menu bar without trouble. *Held 2026-09-24 (D.6): on the first build all but the look of the dividers, which were then chosen from a sampler, and on the re-check that too.* | §2.4, §2.12, §5.2 |
 | **P16** | *Measured 2026-09-24 (D.6): 1.5 to 1.6% of a core with the window closed, against 0.0 at rest before; accepted.* The cost of rendering the label once a second at 24 × 60 steps. | §5.2 |
+| **P17** | *Hand check.* The history fitted to the width: resizing the window zooms the graphs and loses no history; with fewer samples than points each sample is a crisp block, and the plot moves a block at a time; with a long history each point shows a peak; the header's two controls each commit on Return, on focus loss, and on a click elsewhere, take presets, and reject and revert; the menu bar's three settings each change the item at once and survive a relaunch; the window's new minimum width, 501 pt, is acceptable. | §2.4, §2.8, §2.10–§2.12 |
 | **P11** | *Confirmed 2026-09-22 (D.6): busy within 0.01 points of `top` under load, 0.73 idle with the phases unaligned.* *Re-confirm in the real app:* the machine-wide figure agrees with `top` running alongside, idle and under a known load. Do not expect agreement with `ps`, or with `top`'s per-process column; they measure something else. | §2.9 |
 
 ## 8. Deferred, and out of scope
@@ -549,7 +573,8 @@ The design leans on some platform behavior that is recalled or documented but no
 
 **Later, if wanted:**
 
-- **The menu bar item's width.** At 24 CPUs and the defaults it is 1,579 pt, about half of a 3,072-pt display's menu bar. One point per step was chosen knowing that (D27); a narrower step, or a cap on the width, stays available.
+- **Limits that take the settings together.** Each setting is held within its own range, and nothing checks one against another, so a period as long as the history length gives a graph of a single sample. Sensible minimums and maximums across the settings are wanted; what they should be is to be found by living with the settings as they are, and is the next piece of work (D30).
+- **The header's width.** Two controls make the window's minimum width 501 pt. The header's layout is part of the later redesign of the window.
 - **Menu-bar-only.** If the app ever becomes menu-bar-only, the extra's menu gains a Quit item.
 
 **Not in version 1:** anything about core kinds; per-CPU labels; separate colors for user and system time; per-process information; GPU or Neural Engine load; history persisted between launches; the window's position persisted; export; localizations beyond English, though strings go through the String Catalog machinery the project settings enable.
@@ -593,6 +618,10 @@ The design leans on some platform behavior that is recalled or documented but no
 | **D25** | Does the menu bar graph sample on the window's monitor or its own? | Its own: a second `LoadMonitor`, with its own period and step count, resumed when the label appears and never suspended (2026-09-24). D23 stands for the window's. | You | §2.2, §2.10, §4.2, §5.1 | B.9, B.18 |
 | **D26** | Where do the menu bar graph's settings live, and what are they? | In the settings window, below the launch checkbox: the period, the same control as the header's with the same range, presets, rules, and default of 1; and the history length, 30 to 120 s, presets 30, 60, 90, and 120, default 60. Each CPU's width is the history length divided by the period in whole steps, rounded down, and never fewer than one. | You; the floor of one step is a default (A.2) | §2.4, §2.12, §5.9, §5.10 | B.18 |
 | **D27** | One point per step in the menu bar, or narrower? And does the graph replace the symbol or join it? | One point, as the window, accepting an item some 1,460 pt wide for 24 CPUs at the defaults; the graph replaces the `cpu` symbol, and the menu is unchanged. | You | §2.4, §8 | B.18 |
+| **D28** | Is the history as long as the graph is wide? | No (2026-09-29). The history's length in samples is the history length divided by the period; the path still has one step for every point of width; and the history is fitted to the steps. Resizing the window is a zoom. This supersedes D4 for the window, and for the menu bar the part of D26 and D27 that made the width the history's: the view reports nothing to the model. | You | §2.8, §2.10, §4.2, §5.5 | B.19 |
+| **D29** | How is a history fitted to a width it does not match? | With more points than samples, crisp blocks: each point draws one sample, so that where the fit is uneven the blocks differ by a point and every edge is on a whole point; blended boundary columns were the alternative. With more samples than points, the peak: each point draws the highest of its samples; the average, and the average with the peak drawn over it, were the alternatives. | You | §2.8, §5.5 | B.19 |
+| **D30** | What sets the width of a CPU's graph in the menu bar, now that the history does not? | A third setting, the graph width in points, in the settings window with the other two; a fixed constant, and leaving the menu bar as it was, were the alternatives. Limits that take the settings together are wanted and deferred until the settings have been lived with. | You | §2.4, §2.12, §8 | B.19 |
+| **D31** | What does the window's history length allow? | More than the menu bar's: 30 s to an hour. The window's two settings are in its header. | You; the numbers are defaults (A.2) | §2.6, §2.11 | B.19 |
 
 ### A.2 Defaults adopted without discussion
 
@@ -618,6 +647,7 @@ These were offered as defaults marked *(proposed)*, to be vetoed, and were not. 
 | The buffer-leak regression test. | §6 |
 | **Added while writing the clean version, and not previously discussed:** before the first load is available the header's second line reads `CPU usage: —`. The earlier drafts specified the failure text but not this initial state. | §2.6 |
 | **The menu bar graph** (2026-09-24): it is 16 pt tall; a history length shorter than the period gives one step, not zero; the menu bar's sampling starts when the label first appears; the label shows the `cpu` symbol when there is nothing to render. The dividers were first 1 pt at 40%, a default; you found them indistinguishable from the graph and chose 3 pt at 25%, a point clear of the graph, with endcaps, from a sampler (D.6), so they are a decision, not a default. | §2.4, §2.13, §5.2 |
+| **The decoupled history** (2026-09-29): the window's history length is 30 to 3,600 s with presets 60, 300, 900, and 3,600 and a default of 300; the menu bar's graph width is 10 to 120 pt with presets 20, 30, 40, and 60 and a default of 30; the header's control reads *Show the last … seconds* and the settings' *Draw each core … points wide*; the peak is chosen by total load; a period or history change resizes the history by the existing rule and keeps what was sampled at the old period (D10). | §2.4, §2.10–§2.12, §5.5 |
 
 ### A.3 How the document got here
 
@@ -635,6 +665,7 @@ These were offered as defaults marked *(proposed)*, to be vetoed, and were not. 
 - **One canvas** (2026-09-24). You noticed the window costing more CPU than it should, in the app and in WindowServer, and asked for an investigation driven by data. Logging was measured innocent; SwiftUI's layout of twenty-four views was the cost, and the graphs became rows of one canvas (D22).
 - **The isolation default** (2026-09-22). Reviewing PR 2 you asked why every core declaration was `nonisolated`; the answer exposed the App target's `MainActor` default, inherited from SourceTools, as the cause. You had it replaced by the project baseline (D21), and the keyword left the code.
 - **The menu bar graph** (2026-09-24). You specified the live graph — every core side by side, the width from a history length and a period of its own, the colors Apple's — and asked for questions first; four were settled (D24–D27). A probe answered P10 before any code: a `Canvas` label draws nothing, an `Image` label is the item's image, so the graph is rendered to a template image on every sample. The extra got a monitor of its own, the settings window the two settings, and the period control became generic over both. On the first build the technical side held, but the 1 pt dividers read as part of the graph; you asked for something more distinct, a point of clear space either side, and endcaps, and picked 3 pt at 25% from a sampler that drew every divider slot in a different style.
+- **The decoupled history** (2026-09-29). The first item of the polish pass. You asked that the window take the menu bar's scheme of a period and a history length, and that the history be decoupled from the path: one step per point of width still, a sample spanning several points or several samples sharing one. Four questions were settled first (D28–D31): the menu bar's width became a setting of its own, the fit is by crisp blocks one way and by peak the other, and the window's history runs to an hour. The four settings became one generic type, and the view stopped reporting its width to the model.
 
 ### A.4 What planning the implementation changed
 
@@ -916,6 +947,30 @@ The last is cheap and buys the most, so it is the design. The deadline rule move
 **One control for three settings.** The header's `PeriodControl` was specific to `SamplingPeriod`. "The same control with the same rules" for two more settings is one generic control, `SecondsControl<Value: WholeSeconds>`, over a protocol of the three things it touches — the seconds, the presets, and the parse from text — so that a second copy could not drift from the first, and the compiler holds the two types to the same contract.
 
 **The cost** (P16). Rendering a 1,463 × 16 pt image at 2x once a second costs the app 1.5 to 1.6% of a core with the window closed, where it cost 0.0 at rest before **[O]** (D.6). `ImageRenderer` is the whole of it: there is no view hierarchy to lay out, one canvas and one image. It is of the order of the window's own graph (D22) and accepted.
+
+### B.19 The history decoupled from the width
+
+**What you asked for** (2026-09-29). That the main view use the same scheme of settings as the menu bar extra, a period and a history length, and that the history length be decoupled from the number of steps in the path, so that a single sample can span several points: *"if the window width was 90 and the history length is 15, that would mean the bezier path would draw a single sample across 6 points where previously it was just the one"*. The same for the menu bar. The steps in the path stay equal to the graph's width in points, and the scaling goes both ways: with a history longer than the width, each step is an amalgamation of several samples.
+
+**What it undoes.** D4 made the history exactly as long as the graph was wide, and the step count flowed up from the view to the model, the one place the model depended on view geometry (B.4). With the history's length a setting, that dependence is gone: `LoadStackView` no longer measures its width for the model, and the gate that kept SwiftUI's transient 900-pt layout from truncating a history (D.6, P14) has nothing left to guard. Resizing the window is a zoom.
+
+**The hole in the request, and D30.** The menu bar graph's width was the history length divided by the period. Decoupled, nothing set it. You chose a third setting over a fixed constant. Its floor of 10 pt is also the end of the 1-pt graphs the first two settings could produce, which was the first item on the polish list; what remains of that item is limits that take the settings together, which you want and which wait on living with these (§8).
+
+**The fit, and D29.** One rule serves both directions if it is put as ownership: every sample belongs to the one step its center falls in. With more samples than steps each step owns at least one, since a span of more than one sample's width always contains a sample's center, and it draws the peak of what it owns. With more steps than samples some steps own nothing and draw the sample under their own center, which makes each sample a block. Two things follow from ownership being exclusive: a spike is drawn once, never twice and never not at all, and the blocks of an uneven fit are as equal as whole points allow, 6 and 7 for 15 samples in 100 points.
+
+- *The peak, not the average.* I recommended the average, as the truthful figure for a load, which is itself an average over time. You chose the peak: a spike survives however long the history, which is what a reader scanning for trouble wants, and it is what an audio waveform's overview draws. The cost is that a long history overstates the load; the header's figure stays `top`'s.
+- *Crisp blocks, not blended boundaries.* A column that straddles two samples could draw their weighted mix. That keeps every sample's width exact on average and puts a false, intermediate height at every boundary. Blocks on whole points draw only loads that were sampled.
+- *Whole-number arithmetic.* The edges are computed in integers, so a block's edge cannot move by a point through the rounding of a fraction.
+
+**What I left unexact, and say so.** The peak is of loads as percentages. Were the fit an average, the mean of percentages would differ from the ticks summed and divided once wherever samples covered unequal tick counts, which is the distinction B.5 draws for the machine-wide figure; the peak has no such hazard, since it chooses one sample and computes nothing from several.
+
+**A period change** changes the sample count, since the history length is in seconds, and the history is resized by the rule it already had. The samples kept were taken at the old period, as D10 accepted; the alternative, resampling the old history to the new period, would invent loads that were never measured.
+
+**One generic setting.** Four settings share every mechanic, the range, the presets, the default, the parse, and the reject-and-revert, and differ only in their numbers. `BoundedSetting<Limits>` states that once. `Limits` is a phantom type: nothing ever holds a value of it, it only names a set of numbers, and it makes a period and a width different types, so that passing one for the other is a compile error and not a bug to find. The failable initializers stay the only way in, as they were for `SamplingPeriod` alone. The default cannot be a stored constant of a generic type, so it is computed, and a default declared outside its own range falls back to the range's lower bound; a test holds every set of limits to a default and presets within its range, which is where that invariant is checked, since the type system cannot compare two constants.
+
+**The cost** was measured and could not be told from none **[O]** (D.6): fitting the history is a few hundred integer operations per row per sample.
+
+**The window's minimum width** rose to 501 pt **[O]**, since the header's second line now ends in a control. The header's layout belongs to the redesign of the window that follows, so it is recorded (§8) and not worked around.
 
 ## Appendix C — Prior art: how `top`, `ps`, and the kernel answer these questions
 
@@ -1399,6 +1454,10 @@ The §7 checks as they were run, with what was seen. Conditions unless stated: t
 | **P15**, first build | **Held but for the dividers.** You. | The technical side worked as expected; the 1 pt dividers at 40% looked like parts of the graph. |
 | The divider sampler | Your pick, 2026-09-24. | A scratch Release build drew every divider slot, the endcaps included, in a different style, cycling eight through the 25 slots with a 1 pt gap either side: A 1 pt 40%, B 1 pt opaque, C 2 pt 40%, D 2 pt opaque, E 3 pt 25%, F 1 pt opaque half height, G 2 pt 60%, H 1 pt opaque dashed 2 on 2 off. You chose E, "the one that is wider and lighter". Shipped: 3 pt at 25%, 1 pt gaps, endcaps the same; the image 1,563 × 16 pt for 24 CPUs at 60 steps. |
 | **P16** the label's cost | **Measured**; accepted. | Release, window closed, 24 CPUs, 60 steps, 1 s period, `top -l 33 -s 1 -pid`, medians of 30 samples: 1.5, 1.5, 1.6% of a core over three runs, maxima 2.5 to 3.1 with one 16.5 outlier; `main` at rest in the same session, 0.0 (a second control run read 4.75 with a 17.4 maximum and is taken as noise). The menu bar monitor's log: 36 samples in 36 s, intervals 0.938–1.062 s, lateness median 53 ms, a sample 0.22–0.33 ms; the window's monitor took none. |
+| **P15**, the re-check | **Held.** You, 2026-09-24. | With the dividers at 3 pt and 25%, a point clear of the graphs, and the endcaps: "everything looked fine". The item, its tint, the menu, and the settings as listed in P15. |
+| The decoupled history, from the log | Observed 2026-09-29, Release. | Windowless: `[menu bar] Sampling started: 24 CPUs, sample count 30`, the stored history length being 30 s. With the window: `[window] Sampling started: 24 CPUs, sample count 300` beside it, the window's width of 397 pt having no part in the count. |
+| The decoupled history, from inside | Observation, 2026-09-29. | A disposable hosted test: `NSStatusBarWindow 859.0x30.0`, `NSStatusBarButton 859.0x22.0`, `image 843.0x16.0 template=true`, one representation of 1686 × 32 pixels; and the main window's `contentMinSize` 501 × 293, the stored 397-pt width having been raised to it. |
+| The decoupled history's cost | **Not separable from none.** | Release, 24 CPUs, 1 s periods, the menu bar's stored history 30 s, the window 397 pt wide before and 501 after; `top -l 33 -s 1 -pid`, medians of 30 samples, `main` and the branch built and run alternately in one session. Window closed: `main` 1.9 and 1.8% of a core, the branch 2.0, 1.6, 1.9, and 1.4. Window open: `main` 3.0 and 2.8, the branch 2.0, 2.9, 3.0, and 2.7. Maxima of 3.2 to 12.9 in every group. The machine read higher throughout than on 2026-09-24, when the same closed-window case read 1.5 to 1.6 at almost twice the item's width; the load average was 1.8. |
 
 ## Appendix E — Evidence
 
