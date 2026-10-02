@@ -32,6 +32,12 @@ struct SettingControl<Limits: SettingLimits>: View {
 				.textFieldStyle(.roundedBorder)
 				.multilineTextAlignment(.trailing)
 				.frame(width: 44)
+
+				//	The field's leading edge is the control's `settingField` guide, so that a stack of these controls
+				//	aligned on that guide puts their fields in one column, whatever their prompts' widths.
+				.alignmentGuide(.settingField) { dimensions in
+					dimensions[.leading]
+				}
 				.focused(isEditing)
 				.onSubmit {
 					commit()
@@ -76,6 +82,22 @@ struct SettingControl<Limits: SettingLimits>: View {
 	///	The reject-and-revert rule in one place: the value `draft` names, or `current` if it names none.
 	static func committedValue(from draft: String, current: BoundedSetting<Limits>) -> BoundedSetting<Limits> {
 		BoundedSetting(text: draft) ?? current
+	}
+
+}
+
+extension HorizontalAlignment {
+
+	///	The leading edge of a `SettingControl`'s text field. A stack of controls aligned on it lines their fields up in
+	///	a column and lets their prompts, of whatever widths, end at that column; any view that sets no such guide aligns
+	///	by its leading edge. Design.md, section 5.10.
+	static let settingField = HorizontalAlignment(SettingFieldAlignment.self)
+
+	///	The identifier behind `settingField`.
+	private enum SettingFieldAlignment: AlignmentID {
+		static func defaultValue(in context: ViewDimensions) -> CGFloat {
+			context[.leading]
+		}
 	}
 
 }

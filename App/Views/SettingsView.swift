@@ -32,8 +32,14 @@ struct SettingsView: View {
 				.padding(.vertical, 4)
 			Text("Menu bar graph")
 				.font(.headline)
-			SettingControl(prompt: "Sample every", unit: "seconds", value: menuBarPeriod, isEditing: $isEditingPeriod)
-			SettingControl(prompt: "Draw each core", unit: "points wide", value: graphWidth, isEditing: $isEditingWidth)
+
+			//	The two controls' fields in one column: the stack aligns them on the fields' leading edges, so the
+			//	control with the shorter prompt sits further right, and the one with the longer stays at the leading
+			//	edge.
+			VStack(alignment: .settingField, spacing: 12) {
+				SettingControl(prompt: "Sample every", unit: "seconds", value: menuBarPeriod, isEditing: $isEditingPeriod)
+				SettingControl(prompt: "Draw each core", unit: "points wide", value: graphWidth, isEditing: $isEditingWidth)
+			}
 		}
 		.frame(maxWidth: .infinity, alignment: .leading)
 		.contentShape(Rectangle())
