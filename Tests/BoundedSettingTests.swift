@@ -39,8 +39,8 @@ struct BoundedSettingTests {
 
 	@Test func theLimitsAreAsSpecified() async throws {
 		#expect(SamplingPeriodLimits.range == 1...60)
-		#expect(WindowHistoryLimits.range == 30...3_600)
-		#expect(WindowHistoryLimits.presetValues == [60, 300, 900, 3_600])
+		#expect(WindowHistoryLimits.range == 15...600)
+		#expect(WindowHistoryLimits.presetValues == [15, 30, 45, 60, 90, 120, 150, 180, 300, 600])
 		#expect(WindowHistoryLength.default.sampleCount == 300)
 		#expect(GraphWidthLimits.range == 15...60)
 		#expect(GraphWidthLimits.presetValues == [15, 20, 25, 30, 45, 60])

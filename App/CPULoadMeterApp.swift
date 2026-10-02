@@ -91,10 +91,12 @@ struct CPULoadMeterApp: App {
 		//	itself: the content reports it above, and the placement below restores it. Design.md, B.8.
 		.restorationBehavior(.disabled)
 
-		//	The content's ideal size is the view's, without the safe-area inset, so a first launch comes up one inset
-		//	shorter than ideal. Every later launch uses the stored rect, which is exact.
+		//	A first launch opens at the window's minimum size (D43), which is what the content answers when offered no
+		//	size at all: the header's column, and every graph at its least height. The answer is the view's size,
+		//	without the safe-area inset, and the window still comes up at exactly its minimum, which is the inset
+		//	taller; the system holds it there (observed 2026-10-02, D.6). Every later launch uses the stored rect.
 		.defaultWindowPlacement { content, _ in
-			WindowPlacement(size: storedWindowSize ?? content.sizeThatFits(.unspecified))
+			WindowPlacement(size: storedWindowSize ?? content.sizeThatFits(.zero))
 		}
 
 		Settings {

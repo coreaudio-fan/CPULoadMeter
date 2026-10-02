@@ -23,8 +23,8 @@ struct SettingControlTests {
 	@Test func everySettingCommitsByItsOwnRange() async throws {
 		let width = try #require(GraphWidth(value: 45))
 
-		#expect(SettingControl<WindowHistoryLimits>.committedValue(from: "3600", current: .default).sampleCount == 3_600)
-		for draft in ["29", "3601", "5", "abc", ""] {
+		#expect(SettingControl<WindowHistoryLimits>.committedValue(from: "600", current: .default).sampleCount == 600)
+		for draft in ["14", "601", "5", "abc", ""] {
 			#expect(SettingControl<WindowHistoryLimits>.committedValue(from: draft, current: .default) == .default, "\(draft)")
 		}
 		#expect(SettingControl<GraphWidthLimits>.committedValue(from: "15", current: width).value == 15)

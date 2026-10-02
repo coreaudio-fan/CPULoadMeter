@@ -1,10 +1,11 @@
 import Foundation
 
-///	The limits of the window's history: 30 to 3,600 samples, 300 by default. A window has room to show far more than the
-///	menu bar does, and the longer lengths are where several samples come to share a point.
+///	The limits of the window's history: 15 to 600 samples, 300 by default. The numbers are the user's (Design.md, D42):
+///	600 is ten minutes at a one-second period, and the presets run through the spans a reader would pick, 15 seconds to
+///	ten minutes at that period.
 enum WindowHistoryLimits: SettingLimits {
-	static let range = 30...3_600
-	static let presetValues = [60, 300, 900, 3_600]
+	static let range = 15...600
+	static let presetValues = [15, 30, 45, 60, 90, 120, 150, 180, 300, 600]
 	static let defaultValue = 300
 }
 
