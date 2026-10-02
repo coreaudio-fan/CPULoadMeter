@@ -26,6 +26,7 @@ The tests are hosted in the app, so a test run launches it. The drawing is teste
 - *Show CPULoadMeter* in the menu bar item's menu does not bring the app to the foreground while another app is active. SwiftUI has no way to activate an app, and the AppKit requests tried were declined by the system or granted only with a Finder window in front; deferred.
 - The menu bar item can be command-dragged out of the menu bar, as any can, and doing so with the window closed quits the app, as macOS documents for an app that then shows only in the menu bar.
 - The window cannot be made narrower than 501 points, the width of the header with its two controls.
+- Nothing stops the menu bar item being set wider than the menu bar has room for, and macOS does not show an item that does not fit. The app keeps running; reduce the graph width in Settings, from the application menu, to bring it back.
 - The app has no icon yet.
 
 `Design.md` is the specification: the design as decided in its body, and in its appendices the reasoning behind every decision, what `top`, `ps`, and the kernel do, the experiments, and every bring-up result with its evidence.
