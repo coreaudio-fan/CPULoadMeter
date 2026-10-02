@@ -39,7 +39,7 @@ struct HeaderView: View {
 						endEditing()
 					}
 				Spacer()
-				SettingControl(prompt: "Update every", unit: "seconds", value: $period, isEditing: isEditingPeriod)
+				SettingControl(prompt: "Sample every", unit: "seconds", value: $period, isEditing: isEditingPeriod)
 			}
 			HStack {
 				Text(Self.usageLine(load: machineLoad, isLastSampleFailed: isLastSampleFailed))

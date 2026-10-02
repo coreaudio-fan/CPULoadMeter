@@ -30,7 +30,7 @@ struct SettingsView: View {
 		Form {
 			Toggle("Open main window at launch", isOn: $isMainWindowOpenedAtLaunch)
 			Section("Menu bar graph") {
-				SettingControl(prompt: "Update every", unit: "seconds", value: menuBarPeriod, isEditing: $isEditingPeriod)
+				SettingControl(prompt: "Sample every", unit: "seconds", value: menuBarPeriod, isEditing: $isEditingPeriod)
 				SettingControl(prompt: "Keep", unit: "samples of history", value: menuBarHistory, isEditing: $isEditingHistory)
 				SettingControl(prompt: "Draw each core", unit: "points wide", value: graphWidth, isEditing: $isEditingWidth)
 			}

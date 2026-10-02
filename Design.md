@@ -78,13 +78,13 @@ The menu bar is SwiftUI's default set of menus, unmodified. That provides:
 The header is pinned to the top of the window at its natural height and spans the window's width.
 
 ```
-Apple M2 Ultra · 24 cores                          Update every [  1 ][▾] seconds
+Apple M2 Ultra · 24 cores                          Sample every [  1 ][▾] seconds
 CPU usage: 8% user, 4% system, 88% idle           Show the last [300][▾] samples
 ```
 
 - **The processor's name and the number of cores.** The count is the number of CPUs the kernel reports, which is also the number of LoadViews. If the name cannot be read, the header says "Unknown CPU".
 - **The machine-wide CPU usage**, in `top`'s wording and order: user, system, and idle, as whole percentages that sum to 100. Before the first load is available the line reads `CPU usage: —`. While samples are failing it reads `CPU usage unavailable` (§2.15).
-- **The update-period control**, and below it **the history-length control** (§2.11).
+- **The update-period control**, reading *Sample every … seconds*, and below it **the history-length control**, reading *Show the last … samples* (§2.11). The first names the unit the second counts in, so that the two read together as a span of time.
 
 The header says nothing about core kinds.
 
@@ -154,7 +154,7 @@ The header says nothing about core kinds.
 - The settings window has the checkbox **Open main window at launch**, on by default, and below it the menu bar graph's three settings.
 - The checkbox always decides whether the main window opens at launch. The system does not restore the window on its own.
 - With the box unchecked, clicking the Dock icon does not show the main window. The menu bar extra and the Window menu do.
-- **Update every** is the menu bar graph's period: the same control as the window's (§2.11), with the same range of 1 to 60, the same presets 1, 2, 5, 10, and 30, the same commit and reject-and-revert rules, and the same default of 1, but a value of its own.
+- **Sample every** is the menu bar graph's period: the same control as the window's (§2.11), with the same range of 1 to 60, the same presets 1, 2, 5, 10, and 30, the same commit and reject-and-revert rules, and the same default of 1, but a value of its own.
 - **Keep** is the menu bar graph's history length in samples, from 30 to 120, with presets 30, 60, 90, and 120 and a default of 60, through the same control and the same rules (§2.10).
 - **Draw each core** is the width of one CPU's graph in points, from 10 to 120, with presets 20, 30, 40, and 60 and a default of 30, through the same control and the same rules. The floor of 10 is what keeps a graph wide enough to read whatever the other two are set to.
 - A change to any of the three takes effect at once, and all three are remembered between launches.
@@ -575,7 +575,7 @@ The design leans on some platform behavior that is recalled or documented but no
 **Later, if wanted:**
 
 - **Limits that take the settings together.** Each setting is held within its own range, and nothing checks one against another. They were wanted while the period divided the history length and a long period could leave a graph of one sample; with the history in samples no setting divides another, and the worst case is gone (D32). Whether any limit across the settings is still wanted is to be found by living with them.
-- **Samples are an odd unit to think in.** A reader wants time, and converting samples to time takes the period, which is what the history was just freed of. Two ways out are noted, neither decided: show the time a graph spans, *samples × period*, as plain text beside the control, so that the setting stays in samples and the time is read and not set; or do as Activity Monitor does and offer no such settings at all, fixing the width a sample is drawn at and letting the window's width alone say how much history shows, which is where version 1 began (D4).
+- **Samples as a unit** were settled by wording (D33): the period's control reads *Sample every … seconds*, which says what a sample is and so what a number of them amounts to in time. The two other ways out that were noted, showing the derived span *samples × period* as text beside the control, and Activity Monitor's way of offering no such settings and letting the window's width alone say how much history shows, were not taken.
 - **The header's width.** Two controls make the window's minimum width 501 pt. The header's layout is part of the later redesign of the window.
 - **Menu-bar-only.** If the app ever becomes menu-bar-only, the extra's menu gains a Quit item.
 
@@ -625,6 +625,7 @@ The design leans on some platform behavior that is recalled or documented but no
 | **D30** | What sets the width of a CPU's graph in the menu bar, now that the history does not? | A third setting, the graph width in points, in the settings window with the other two; a fixed constant, and leaving the menu bar as it was, were the alternatives. Limits that take the settings together are wanted and deferred until the settings have been lived with. | You | §2.4, §2.12, §8 | B.19 |
 | **D31** | What does the window's history length allow? | More than the menu bar's: 30 to 3,600, which were seconds when decided and are samples by D32. The window's two settings are in its header. | You; the numbers are defaults (A.2) | §2.6, §2.11 | B.19 |
 | **D32** | Does the period bear on how finely a graph is drawn? | No (2026-09-29). The history length is a count of samples and not of seconds, so the period divides nothing: it sets how fast the samples arrive, and with that how fast the plot moves and how much time it spans. The first build of D28 had the history in seconds, and changing the period changed the graph's resolution, which looked wrong in use. The other reading, a period that only sets how often the graph is redrawn while sampling stays at one second, was set aside: the plot would not move faster or slower, only in larger jumps. That a sample is an odd unit for a reader is accepted for now (§8). | You | §2.8, §2.10–§2.12, §4.1 | B.19 |
+| **D33** | A sample is an odd unit for a reader; how is the history length made to mean time? | By wording alone (2026-10-02). The period's control reads *Sample every … seconds* where it read *Update every*, in the header and in the settings window, so that it names the unit the history length counts in: sampling every 2 seconds and showing the last 300 samples reads as ten minutes without the app saying so. Nothing in the model changes, and the settings stay independent (D32). | You | §2.6, §2.12, §8 | B.19 |
 
 ### A.2 Defaults adopted without discussion
 
@@ -650,7 +651,7 @@ These were offered as defaults marked *(proposed)*, to be vetoed, and were not. 
 | The buffer-leak regression test. | §6 |
 | **Added while writing the clean version, and not previously discussed:** before the first load is available the header's second line reads `CPU usage: —`. The earlier drafts specified the failure text but not this initial state. | §2.6 |
 | **The menu bar graph** (2026-09-24): it is 16 pt tall; a history length shorter than the period gives one step, not zero; the menu bar's sampling starts when the label first appears; the label shows the `cpu` symbol when there is nothing to render. The dividers were first 1 pt at 40%, a default; you found them indistinguishable from the graph and chose 3 pt at 25%, a point clear of the graph, with endcaps, from a sampler (D.6), so they are a decision, not a default. | §2.4, §2.13, §5.2 |
-| **The decoupled history** (2026-09-29): the window's history length is 30 to 3,600, in samples since D32, with presets 60, 300, 900, and 3,600 and a default of 300; the menu bar's graph width is 10 to 120 pt with presets 20, 30, 40, and 60 and a default of 30; the header's control reads *Show the last … samples* and the settings' *Draw each core … points wide*; the peak is chosen by total load; a period or history change resizes the history by the existing rule and keeps what was sampled at the old period (D10). | §2.4, §2.10–§2.12, §5.5 |
+| **The decoupled history** (2026-09-29): the window's history length is 30 to 3,600, in samples since D32, with presets 60, 300, 900, and 3,600 and a default of 300; the menu bar's graph width is 10 to 120 pt with presets 20, 30, 40, and 60 and a default of 30; the header's history control reads *Show the last … samples* and the settings' *Draw each core … points wide*; the peak is chosen by total load; a period or history change resizes the history by the existing rule and keeps what was sampled at the old period (D10). | §2.4, §2.10–§2.12, §5.5 |
 
 ### A.3 How the document got here
 
@@ -670,6 +671,7 @@ These were offered as defaults marked *(proposed)*, to be vetoed, and were not. 
 - **The menu bar graph** (2026-09-24). You specified the live graph — every core side by side, the width from a history length and a period of its own, the colors Apple's — and asked for questions first; four were settled (D24–D27). A probe answered P10 before any code: a `Canvas` label draws nothing, an `Image` label is the item's image, so the graph is rendered to a template image on every sample. The extra got a monitor of its own, the settings window the two settings, and the period control became generic over both. On the first build the technical side held, but the 1 pt dividers read as part of the graph; you asked for something more distinct, a point of clear space either side, and endcaps, and picked 3 pt at 25% from a sampler that drew every divider slot in a different style.
 - **The decoupled history** (2026-09-29). The first item of the polish pass. You asked that the window take the menu bar's scheme of a period and a history length, and that the history be decoupled from the path: one step per point of width still, a sample spanning several points or several samples sharing one. Four questions were settled first (D28–D31): the menu bar's width became a setting of its own, the fit is by crisp blocks one way and by peak the other, and the window's history runs to an hour. The four settings became one generic type, and the view stopped reporting its width to the model.
 - **The period as a rate** (2026-09-29). Trying the build, you found that changing the period changed the graph's resolution where you expected it only to move faster or slower, and asked what making the period a rate alone would do to the math. It made it simpler: the history became a count of samples, the one division between two settings went away, and with it the case the cross-setting limits were wanted for (D32). You noted that samples are an odd unit for a reader and that Activity Monitor avoids the question by offering no such settings; both are recorded in §8.
+- **Sample every** (2026-10-02). Having lived with the settings, you resolved the samples-and-time question with a label: *Update every* became *Sample every* in both places (D33). The same PR is to carry the work on the settings' valid values.
 
 ### A.4 What planning the implementation changed
 
@@ -973,6 +975,8 @@ The last is cheap and buys the most, so it is the design. The deadline rule move
 **The reading set aside.** The period could instead have become a redraw rate alone: sample once a second always, keep the history in seconds, and repaint every period. The resolution would hold then too, but the graph would span the same time at every period and move in larger, rarer jumps, not faster or slower, which is not what you described.
 
 **The unit.** You named the snag yourself: a sample is an odd unit for a reader, a good interface would not ask for the conversion to time, and the conversion needs the period, *"which puts us back of having the updated period involved in the history size"*. It is a real tension and it is not resolved here. A time axis holds the span and lets the resolution vary with the rate; a sample axis holds the resolution and lets the span vary; one setting cannot hold both. Showing the derived span beside the control would let the time be read without being set. Activity Monitor, as you observed, takes the other way out: it offers no such settings, fixes the size a sample is drawn at, and lets the window's width say how much history shows, which is D4, where this design began. Both are in §8 for the polish that follows.
+
+**The unit, settled by wording** (D33). You came back to it on 2026-10-02 and chose neither way out: *"I pretty much want to solve it by simply changing the wording of a few of the labels."* *Update every* said what the screen does; *Sample every* says what a sample is, and with that the history length, a number of samples, reads as a span of time: the conversion is one the reader makes from two labels, and no setting has to hold both the span and the resolution. It costs nothing in the model, which is why it was preferred to a derived figure that would have had to be laid out, kept current, and worded.
 
 **A period change** leaves the samples already taken where they are, at the spacing they were taken at, as D10 accepted; the alternative, resampling the old history to the new period, would invent loads that were never measured.
 
