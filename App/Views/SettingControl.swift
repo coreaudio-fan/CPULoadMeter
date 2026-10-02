@@ -70,6 +70,17 @@ struct SettingControl<Limits: SettingLimits>: View {
 		.onChange(of: value) {
 			draft = String(value.value)
 		}
+
+		//	The window closing hides the control rather than destroying it, and a field that was editing would stay the
+		//	window's first responder while hidden, to be editing still when the window reopened; and a focus given up
+		//	then is not noticed until the control is next updated, which is on reopening (observed 2026-10-02). So the
+		//	control commits its draft itself as it goes, and gives the focus up with it.
+		.onDisappear {
+			if isEditing.wrappedValue {
+				commit()
+				isEditing.wrappedValue = false
+			}
+		}
 	}
 
 	///	Commits the draft: a whole number in the setting's range becomes the value; anything else is rejected, and the

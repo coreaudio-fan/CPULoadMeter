@@ -25,6 +25,12 @@ struct SettingsView: View {
 	///	Whether the width field has focus, likewise.
 	@FocusState private var isEditingWidth: Bool
 
+	///	Whether the window is in the moment of opening, during which the focus the system gives its first field is
+	///	declined: the window opens with no field editing, and the user clicks or tabs into the one they mean to edit.
+	///	The moment ends when that focus has been declined once, or half a second after appearing, whichever is first; a
+	///	focus given after that is the user's.
+	@State private var isOpening = false
+
 	var body: some View {
 		VStack(alignment: .leading, spacing: 12) {
 			Toggle("Open main window at launch", isOn: $isMainWindowOpenedAtLaunch)
@@ -42,11 +48,24 @@ struct SettingsView: View {
 			}
 		}
 		.frame(maxWidth: .infinity, alignment: .leading)
-		.contentShape(Rectangle())
-		.onTapGesture {
-			isEditingPeriod = false
-			isEditingWidth = false
+
+		//	The system makes the first text field the window's first responder as the window opens, and the view's
+		//	default-focus preference did not change that (observed 2026-10-02; Design.md, D.6). So the focus is taken
+		//	back the moment it arrives, while the window is opening.
+		.onAppear {
+			isOpening = true
+			Task {
+				try? await Task.sleep(for: .milliseconds(500))
+				isOpening = false
+			}
 		}
+		.onChange(of: isEditingPeriod) {
+			if isEditingPeriod && isOpening {
+				isOpening = false
+				isEditingPeriod = false
+			}
+		}
+
 		.padding(20)
 		.frame(width: 360)
 	}
