@@ -4,8 +4,9 @@ import SwiftUI
 ///	Design.md, section 5.3.
 struct MainView: View {
 
-	///	The width the window opens at on first launch (Design.md, section 2.5).
-	static let idealWidth: CGFloat = 480
+	///	The width the window opens at on first launch (Design.md, section 2.5): wide enough for the header's two-line
+	///	layout, with room to spare, so that a first launch does not come up in the column.
+	static let idealWidth: CGFloat = 600
 
 	///	The processor's name, or `nil` if the kernel would not say.
 	let processorName: String?

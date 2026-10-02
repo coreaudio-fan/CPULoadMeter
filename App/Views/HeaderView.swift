@@ -1,9 +1,19 @@
 import SwiftUI
 
-///	The header: the processor's name and the CPU count with the period control beside them, and below, the machine-wide
-///	CPU usage in `top`'s wording with the history control beside it. Pinned to the top of the window at its natural
-///	height. Design.md, sections 2.6 and 5.4.
+///	The header: the processor's name and the CPU count, the machine-wide CPU usage in `top`'s wording, and the two
+///	controls, pinned to the top of the window at its natural height.
+///
+///	It has two layouts and takes the first that fits the width it is given. Where there is room, two lines, each with
+///	its text at the left and a control at the right. Where there is not, one column: the two texts, then the two
+///	controls below them. The controls are the same size in both; only their places change. The window can therefore be
+///	as narrow as the widest single item. Design.md, sections 2.5, 2.6, and 5.4.
 struct HeaderView: View {
+
+	///	The widest the usage line gets: two digits in each of its three figures, which is the most a sum of 100 allows,
+	///	and with monospaced digits any such line is as wide as any other. The line reserves this width whatever it
+	///	reads, so that neither the width at which the layout changes nor the window's minimum width moves as the figures
+	///	do.
+	static let widestUsageLine = usageLine(load: CPULoad(TickDelta(from: CPUTicks(user: 0, system: 0, idle: 0, nice: 0), to: CPUTicks(user: 33, system: 33, idle: 34, nice: 0))), isLastSampleFailed: false)
 
 	///	The processor's name, or `nil` if the kernel would not say.
 	let processorName: String?
@@ -30,30 +40,69 @@ struct HeaderView: View {
 	let isEditingHistory: FocusState<Bool>.Binding
 
 	var body: some View {
-		VStack(alignment: .leading, spacing: 4) {
-			HStack {
-				//	Fixed sizes on both ends keep the window at least as wide as the header needs (section 2.5).
-				Text("\(processorName ?? "Unknown CPU") · \(cpuCount) cores")
-					.fixedSize()
-					.onTapGesture {
-						endEditing()
-					}
-				Spacer()
-				SettingControl(prompt: "Sample every", unit: "seconds", value: $period, isEditing: isEditingPeriod)
+		//	The first layout whose natural width fits is the one shown. The texts and the controls are all of fixed
+		//	size, so the wide layout fits exactly when its two ends do not meet, and the column always fits, being the
+		//	last.
+		ViewThatFits(in: .horizontal) {
+			VStack(alignment: .leading, spacing: 4) {
+				HStack {
+					nameText
+					Spacer()
+					periodControl
+				}
+				HStack {
+					usageText
+					Spacer()
+					historyControl
+				}
 			}
-			HStack {
-				Text(Self.usageLine(load: machineLoad, isLastSampleFailed: isLastSampleFailed))
-					.monospacedDigit()
-					.fixedSize()
-					.onTapGesture {
-						endEditing()
-					}
-				Spacer()
-				SettingControl(prompt: "Show the last", unit: "samples", value: $history, isEditing: isEditingHistory)
+			VStack(alignment: .leading, spacing: 4) {
+				nameText
+				usageText
+				periodControl
+				historyControl
 			}
+			.frame(maxWidth: .infinity, alignment: .leading)
 		}
 		.padding(.horizontal, 12)
 		.padding(.vertical, 8)
+	}
+
+	///	The processor's name and the CPU count. A click on it ends editing.
+	private var nameText: some View {
+		Text("\(processorName ?? "Unknown CPU") · \(cpuCount) cores")
+			.fixedSize()
+			.onTapGesture {
+				endEditing()
+			}
+	}
+
+	///	The usage line, at the width of the widest it can be. The widest line is laid out and hidden, and the line as it
+	///	reads now is drawn over its leading edge.
+	private var usageText: some View {
+		Text(Self.widestUsageLine)
+			.monospacedDigit()
+			.fixedSize()
+			.hidden()
+			.overlay(alignment: .leading) {
+				Text(Self.usageLine(load: machineLoad, isLastSampleFailed: isLastSampleFailed))
+					.monospacedDigit()
+					.fixedSize()
+			}
+			.contentShape(Rectangle())
+			.onTapGesture {
+				endEditing()
+			}
+	}
+
+	///	The period's control.
+	private var periodControl: some View {
+		SettingControl(prompt: "Sample every", unit: "seconds", value: $period, isEditing: isEditingPeriod)
+	}
+
+	///	The history length's control.
+	private var historyControl: some View {
+		SettingControl(prompt: "Show the last", unit: "samples", value: $history, isEditing: isEditingHistory)
 	}
 
 	///	Takes focus from both fields, which commits whichever was editing: what a click on the header's text does.

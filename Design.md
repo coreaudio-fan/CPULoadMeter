@@ -68,9 +68,9 @@ The menu bar is SwiftUI's default set of menus, unmodified. That provides:
 ### 2.5 The main window
 
 - There is one main window. Its title is `CPULoadMeter`, which is the text the Window menu shows. The window itself has a hidden title bar and displays no title.
-- It is freely resizable down to a minimum: as wide as the header needs, and as tall as the header plus 8 pt for each LoadView.
+- It is freely resizable down to a minimum: as wide as the widest single item of the header, text or control, since the header rearranges itself into a column where its two-line layout does not fit (§2.6); and as tall as the header plus 8 pt for each LoadView.
 - It never scrolls.
-- On first launch it opens 480 pt wide, with 20 pt for each LoadView below the header. After that it reopens at the size it last had. Its position is not remembered.
+- On first launch it opens 600 pt wide, which shows the header in its two-line layout, with 20 pt for each LoadView below the header. After that it reopens at the size it last had. Its position is not remembered.
 
 *Rationale: B.7 (title), B.8 (size and position), B.14 (minimum size).*
 
@@ -82,6 +82,17 @@ The header is pinned to the top of the window at its natural height and spans th
 Apple M2 Ultra · 24 cores                          Sample every [  1 ][▾] seconds
 CPU usage: 8% user, 4% system, 88% idle           Show the last [300][▾] samples
 ```
+
+Where the window is too narrow for that, the header is one column instead, the two texts and then the two controls below them:
+
+```
+Apple M2 Ultra · 24 cores
+CPU usage: 8% user, 4% system, 88% idle
+Sample every [  1 ][▾] seconds
+Show the last [300][▾] samples
+```
+
+- **The two layouts.** In the two-line layout the texts keep to the left edge and the controls to the right. The header changes to the column at the width where the two ends of a line would meet, and back again above it. The controls are the same size in both; they move and do not shrink. That width does not depend on what the usage line reads at the moment.
 
 - **The processor's name and the number of cores.** The count is the number of CPUs the kernel reports, which is also the number of LoadViews. If the name cannot be read, the header says "Unknown CPU".
 - **The machine-wide CPU usage**, in `top`'s wording and order: user, system, and idle, as whole percentages that sum to 100. Before the first load is available the line reads `CPU usage: —`. While samples are failing it reads `CPU usage unavailable` (§2.15).
@@ -342,7 +353,7 @@ There is no `import AppKit` and no app delegate.
 
 - The content reports its size through `onGeometryChange`, and the app stores the width and height in `UserDefaults`. They are optionals rather than zero sentinels: absent means "never shown", and the type says so.
 - `storedWindowSize` is the stored size when both halves are present, and `nil` otherwise. `defaultWindowPlacement` places the window at that size, or else at the size the content asks for.
-- The first-launch size (§2.5) is therefore not a constant computed ahead of layout, which would need the header's height before the header exists. It is the content's own ideal size: `MainView` has an ideal width of 480 pt and each `LoadView` an ideal height of 20 pt, and the header contributes its natural height.
+- The first-launch size (§2.5) is therefore not a constant computed ahead of layout, which would need the header's height before the header exists. It is the content's own ideal size: `MainView` has an ideal width of 600 pt and each `LoadView` an ideal height of 20 pt, and the header contributes its natural height.
 - Within one run nothing more is needed: a closed window's object survives, hidden, and reopens as it was.
 
 The `App`'s initializer creates both monitors: the window's with its stored period and history length, and the menu bar's with its stored period and graph width, which is its history (§2.10). `MainWindowContent` stores the window's period again whenever the monitor's changes, holds the window's history length and gives the monitor its sample count when it changes, and resumes the monitor when it appears and suspends it when it disappears, which is what confines the window's sampling to the time the window is shown (§2.2). The settings window stores the menu bar's two settings, and `MenuBarGraphLabel` applies them (§5.2).
@@ -365,7 +376,7 @@ With another app active, the button does not bring this app to the foreground (�
 
 ```
 MainView            VStack(spacing: 0)
-├─ HeaderView         natural height (.fixedSize vertical), full width
+├─ HeaderView         natural height (.fixedSize vertical), full width; two lines where they fit, a column where not
 ├─ hairline
 └─ LoadStackView      one Canvas, fills the remainder; one row per LoadView, minHeight 8 each; hairlines on the
                       row boundaries
@@ -378,6 +389,10 @@ There is no `ScrollView` anywhere. The window's minimum size emerges from the co
 ### 5.4 The header
 
 `HeaderView` takes the processor name, the CPU count, the latest machine-wide `CPULoad` (optional), whether the last sample failed, and bindings to the period and the history length. The name is read once at launch. Its two lines each end in a control, so the window is at least as wide as the wider line: the usage text beside the history control.
+
+**The two layouts** are the two children of a `ViewThatFits(in: .horizontal)`, which shows the first whose natural width fits the width offered: the two lines, each an `HStack` of a text, a `Spacer`, and a control; then the column, a leading-aligned `VStack` of the same four pieces. Every piece is of fixed size, so the two-line layout fits exactly when the ends of its wider line do not meet, and the column, being last, is what the window's minimum width comes from. The pieces are the same views in both, so nothing is resized. A field being edited when the layout changes loses its uncommitted draft, since the control is a different instance in the other layout; the window is not resized while typing.
+
+**The usage line reserves the width of the widest it can be**, a line with two digits in each figure, which is the most a sum of 100 allows and, with monospaced digits, as wide as any other such line. That widest line is laid out hidden and the line as it reads is drawn over its leading edge. Without it the width at which the layout changes, and the window's minimum width, would move by a digit's width from one sample to the next, and a window left at the boundary would change layout once a second.
 
 The three whole percentages come from `UsagePercentages`, which rounds cumulatively: *busy* is user plus system rounded to the nearest whole percent; *user* is user rounded; *system* is busy minus user; *idle* is 100 minus busy. Every figure is therefore non-negative and the three always sum to 100.
 
@@ -525,6 +540,7 @@ swift-testing, with `@testable import CPULoadMeter`, hosted in the app. A test r
 - **Every setting**, through the one generic: both ends of its range are values and one past either is not; unparseable text is rejected; the default is within the range; the presets are within it, ascending, and none is dropped; and the limits are the numbers specified.
 - **The sample counts:** the window's is its history length and the menu bar's is its graph width, each the setting itself; and in the monitor, a new period leaves the history and its sample count exactly as they were.
 - **`SettingControl`'s commit rule**, `committedValue(from:current:)`, under each setting's limits: in range commits, everything else reverts.
+- **The header's layouts**, measured through `ImageRenderer` at offered widths: two lines at its ideal width and above, the taller and narrower column a point below it, never narrower than the column; and both layouts' widths the same whatever the usage line reads.
 - **`MonitorState.advanced`:** first sample, steady state, and a change in the CPU count.
 
 **The monitor**, driven through its injected reader and sleep: a failed read keeps the last good sample; a changed CPU count resets the baseline; a new period restarts the loop, which is asserted on the next deadline the monitor asks to sleep until. No test waits on a real clock.
@@ -562,6 +578,7 @@ The design leans on some platform behavior that is recalled or documented but no
 | **P16** | *Measured 2026-09-24 (D.6): 1.5 to 1.6% of a core with the window closed, against 0.0 at rest before; accepted.* The cost of rendering the label once a second at 24 × 60 steps. | §5.2 |
 | **P17** | *Held 2026-09-29 (D.6): on the first build all but the period, which changed the graph's resolution and led to D32; on the re-check that too, and the 501 pt minimum width accepted as a matter for the window's polish.* The history fitted to the width: resizing the window zooms the graphs and loses no history; with fewer samples than points each sample is a crisp block, and the plot moves a block at a time; with a long history each point shows a peak; a change of period changes how fast the plot moves and not how finely it is drawn; the header's two controls each commit on Return, on focus loss, and on a click elsewhere, take presets, and reject and revert; the menu bar's three settings each change the item at once and survive a relaunch; the window's new minimum width, 501 pt, is acceptable. | §2.4, §2.8, §2.10–§2.12 |
 | **P18** | *Hand check.* The menu bar graph with its history as its width: each line is one sample; the width control offers 15, 20, 25, 30, 45, and 60, accepts 15 to 60, and rejects and reverts outside it; a wider graph gains blank space at its left and a narrower one keeps its newest samples; the settings window shows no history setting for the menu bar; the stored width survives a relaunch. | §2.4, §2.12 |
+| **P19** | *Hand check.* The header's two layouts: dragging the window narrower, the controls move below the texts at the width where the two would meet, and back on widening, with no control changing size; the window stops at the width of the header's widest item; the layout does not flicker as the usage figures change; the eight period presets appear in the header's pop-up and in the settings window's. And the minimum height: in the column it is the header plus 8 pt for each LoadView; whether the two-line layout can be dragged as short as its own header plus the same, or stops some 40 pt taller, is to be seen (D.6). | §2.5, §2.6, §2.11 |
 | **P11** | *Confirmed 2026-09-22 (D.6): busy within 0.01 points of `top` under load, 0.73 idle with the phases unaligned.* *Re-confirm in the real app:* the machine-wide figure agrees with `top` running alongside, idle and under a known load. Do not expect agreement with `ps`, or with `top`'s per-process column; they measure something else. | §2.9 |
 
 ## 8. Deferred, and out of scope
@@ -577,7 +594,7 @@ The design leans on some platform behavior that is recalled or documented but no
 - **Limits that take the settings together** are not wanted. They were, while the period divided the history length and a long period could leave a graph of one sample; with the history in samples no setting divides another (D32). The one case left, a menu bar item too wide for the menu bar, is left to whoever set it (D34).
 - **The drawing mechanism.** The cost of drawing does not appear to be bound by the size of the path, so there is little to gain within the path-and-canvas mechanism; what gains there are would come from another mechanism altogether. To be investigated once the polish is done.
 - **Samples as a unit** were settled by wording (D33): the period's control reads *Sample every … seconds*, which says what a sample is and so what a number of them amounts to in time. The two other ways out that were noted, showing the derived span *samples × period* as text beside the control, and Activity Monitor's way of offering no such settings and letting the window's width alone say how much history shows, were not taken.
-- **The header's width.** Two controls make the window's minimum width 501 pt. The header's layout is part of the later redesign of the window.
+- **The window's minimum height in the two-line layout.** The system holds one minimum size for the window, and it is the column's, whose header is 40 pt taller. If a drag in the two-line layout stops that much short of the true minimum, the remedy is not in SwiftUI's hands as far as is known (D.6).
 - **Menu-bar-only.** If the app ever becomes menu-bar-only, the extra's menu gains a Quit item.
 
 **Not in version 1:** anything about core kinds; per-CPU labels; separate colors for user and system time; per-process information; GPU or Neural Engine load; history persisted between launches; the window's position persisted; export; localizations beyond English, though strings go through the String Catalog machinery the project settings enable.
@@ -631,6 +648,7 @@ The design leans on some platform behavior that is recalled or documented but no
 | **D35** | What should the menu bar graph's width allow, and does the menu bar need a history setting? | The width is 15 to 60 pt, with presets 15, 20, 25, 30, 45, and 60 and a default of 15; and the history is always the width, one sample for every point, with no history setting at all (2026-10-02). This changes an earlier decision: D26's history length for the menu bar is removed, and of D30 the width setting stays and its independence from the history goes. The window keeps its own history length and its fit (D28, D29). | You | §2.4, §2.10, §2.12, §4.1 | B.19 |
 | **D36** | Having made the menu bar's history its width, does the window keep a history length of its own? | Yes (2026-10-02). The window's display can afford to be more elaborate and to spend more CPU time looking good, and a history tracked apart from the width leaves more interesting things to draw. The fit of D28 and D29 stays where it has room to show. Its range, presets, and default are yet to be settled, after the header's layout. | You | §2.10, §2.11 | B.19 |
 | **D37** | The period's presets? | 1, 2, 5, 10, 15, 30, 45, and 60, in place of 1, 2, 5, 10, and 30; the range stays 1 to 60. One type serves the window's period and the menu bar's, so both pop-ups change together. | You | §2.11, §2.12 | B.19 |
+| **D38** | The window could be no narrower than the header's two lines, 501 pt. What should give? | The layout (2026-10-02). Where the two lines do not fit, the header becomes a column, the texts and then the controls below them, and the window's minimum width is what the widest single item needs: 299 pt here. The controls do not change size; they only move. The minimum height is, in either layout, the header's height plus the minimum for each core's graph. | You | §2.5, §2.6, §5.4 | B.20 |
 
 ### A.2 Defaults adopted without discussion
 
@@ -643,8 +661,8 @@ These were offered as defaults marked *(proposed)*, to be vetoed, and were not. 
 | Nice ticks count as user. | §2.9, §5.7 |
 | The processor's name comes from `machdep.cpu.brand_string`; "Unknown CPU" when it cannot be read. | §2.6, §5.6 |
 | Line heights are not rounded; the scale is fixed at 0–100%. | §2.8 |
-| The minimum LoadView height is 8 pt; the minimum width is the header's natural width. | §2.5 |
-| The first-launch size is 480 pt wide with 20 pt per LoadView. | §2.5 |
+| The minimum LoadView height is 8 pt; the minimum width is the header's natural width, which since D38 is that of its column. | §2.5 |
+| The first-launch size is 600 pt wide with 20 pt per LoadView. It was 480 until the header had two layouts; at 480 a first launch would have come up in the column. | §2.5 |
 | A failed sample shows `CPU usage unavailable`; sampling retries each period; there is no alert. | §2.15 |
 | Each LoadView has an accessibility label and value. | §2.14 |
 | Missed timer deadlines collapse into one sample. | §2.16 |
@@ -657,6 +675,7 @@ These were offered as defaults marked *(proposed)*, to be vetoed, and were not. 
 | **Added while writing the clean version, and not previously discussed:** before the first load is available the header's second line reads `CPU usage: —`. The earlier drafts specified the failure text but not this initial state. | §2.6 |
 | **The menu bar graph** (2026-09-24): it is 16 pt tall; a history length shorter than the period gives one step, not zero; the menu bar's sampling starts when the label first appears; the label shows the `cpu` symbol when there is nothing to render. The dividers were first 1 pt at 40%, a default; you found them indistinguishable from the graph and chose 3 pt at 25%, a point clear of the graph, with endcaps, from a sampler (D.6), so they are a decision, not a default. | §2.4, §2.13, §5.2 |
 | **The decoupled history** (2026-09-29): the window's history length is 30 to 3,600, in samples since D32, with presets 60, 300, 900, and 3,600 and a default of 300; the menu bar's graph width was 10 to 120 pt with presets 20, 30, 40, and 60 and a default of 30 until you set its limits yourself (D35); the header's history control reads *Show the last … samples* and the settings' *Draw each core … points wide*; the peak is chosen by total load; a period or history change resizes the history by the existing rule and keeps what was sampled at the old period (D10). | §2.4, §2.10–§2.12, §5.5 |
+| **The header's layouts** (2026-10-02): the usage line reserves the width of the widest it can be, so that the layout's threshold does not move with the figures; a draft being typed when the layout changes is dropped. | §2.6, §5.4 |
 
 ### A.3 How the document got here
 
@@ -678,6 +697,7 @@ These were offered as defaults marked *(proposed)*, to be vetoed, and were not. 
 - **The period as a rate** (2026-09-29). Trying the build, you found that changing the period changed the graph's resolution where you expected it only to move faster or slower, and asked what making the period a rate alone would do to the math. It made it simpler: the history became a count of samples, the one division between two settings went away, and with it the case the cross-setting limits were wanted for (D32). You noted that samples are an odd unit for a reader and that Activity Monitor avoids the question by offering no such settings; both are recorded in §8.
 - **Sample every** (2026-10-02). Having lived with the settings, you resolved the samples-and-time question with a label: *Update every* became *Sample every* in both places (D33). The same PR is to carry the work on the settings' valid values. You then answered the three things never observed: an item too wide is not shown, and no ceiling is to be attempted (D34); the cost of drawing is not bound by the size of the path; and a sleep shows as one late sample with nothing wrong on screen. With that the functionality was declared correct, and what remains is polish.
 - **The menu bar's history is its width** (2026-10-02). From playing with the item you set the width's limits, 15 to 60 pt, and reversed an earlier decision: the menu bar graph has no history setting, and holds one sample for every point of its width (D35). The settings window is down to the checkbox and two controls. The window keeps its own history length, for what a larger and costlier display can draw from it (D36), and the period's presets grew to eight, running to the top of its range (D37).
+- **The header's two layouts** (2026-10-02). You asked that the header rearrange itself into a column where its two lines would collide, so that the window can be much narrower, with the controls moving and not changing size (D38). Measuring it showed the threshold moving with the usage figures, and the usage line was given a fixed width.
 
 ### A.4 What planning the implementation changed
 
@@ -1001,6 +1021,20 @@ The last is cheap and buys the most, so it is the design. The deadline rule move
 **The cost** was measured and could not be told from none **[O]** (D.6): fitting the history is a few hundred integer operations per row per sample.
 
 **The window's minimum width** rose to 501 pt **[O]**, since the header's second line now ends in a control. The header's layout belongs to the redesign of the window that follows, so it is recorded (§8) and not worked around.
+
+### B.20 The header's two layouts
+
+**What you asked for** (2026-10-02). As the window narrows, the controls hug its right edge and the texts its left, and the minimum width was where the two met. *"What I'd like to have happen is that when the window got to that size, the layout changed to put both controls under the text items. So they'd be a column. Then the minimum horizontal size of the window would be what is necessary to show all the text items and controls. Note that the controls should not change size in this. They should just move."* And the minimum height, in either layout, is the header's height plus the minimum for each core's graph. D38.
+
+**`ViewThatFits`.** It is SwiftUI's own tool for exactly this: it *"evaluates its child views in the order you provide them to the initializer. It selects the first child whose ideal size on the constrained axes fits within the proposed size"* **[D]**, and the header's pieces are all of fixed size, so "fits" is the same test as "the two ends do not meet". A hand-written `Layout` placing the four pieces either way was the alternative. It would keep each control's identity across the change, where `ViewThatFits` builds each layout's controls separately, so that a draft being typed as the layout changes is dropped. That needs a window dragged while a field is being edited; the standard tool was preferred to a custom layout for a case that rare, and the behavior is recorded (A.2).
+
+**What was measured** **[O]** (D.6). The two lines are 517 pt wide and 68 tall, the column 299 wide and 108 tall, and the layout changes between an offered 516 and 517. The window's minimum content size became 299 × 333, the column's: the 32 pt the hidden title bar takes, the column's 108, the hairline, and 24 × 8.
+
+**The usage line's width.** The first measurement of the two lines gave a width that depended on the figures: `8%` is a digit narrower than `12%`. The window's minimum width had always moved with them, unnoticed. With a layout that changes at that width it would not go unnoticed: a window left at the boundary would rearrange itself whenever the load crossed 10%. So the line reserves the width of the widest it can be, two digits in each of three figures, and both layouts measure the same for every reading, which a test holds. The two lines became 16 pt wider for it, 517 where they had been 501.
+
+**The first-launch width** was 480 pt, which is now below the two lines' 517, so a first launch would have come up in the column. I raised it to 600 (A.2).
+
+**The minimum height, and what I could not settle.** In the column the header is 40 pt taller than in two lines, so the true minimum height differs between the layouts, as you specified. The window, though, has one minimum size, and SwiftUI sets it from the column: `contentMinSize` read 299 × 333 at every width **[O]**. Resizing the window from code told a better story than that: asked for a height of 100, it settled at 332 when 299 wide and at 292 when 520 or 900 wide **[O]**, each exactly its own header plus the graphs' minimum. But a resize from code is not a drag: `setFrame(_:display:)` is one of the two calls AppKit documents as not held to `minSize` **[D]**, and what held those frames was SwiftUI's layout. A drag is held to `minSize`. So I expect a drag in the two-line layout to stop at 333, some 40 pt taller than its true minimum **[R]**, each graph then no shorter than about 9.7 pt, and I have not seen it. It is in P19. If it is so, I know of no way within SwiftUI to give a window a minimum height that depends on its width (§8).
 
 ## Appendix C — Prior art: how `top`, `ps`, and the kernel answer these questions
 
@@ -1494,6 +1528,7 @@ The §7 checks as they were run, with what was seen. Conditions unless stated: t
 | The cost against the window's size | Observation, by eye. You, 2026-10-02. | In `top` and Activity Monitor the window's size has minimal effect on the cost of building and drawing the path. Imprecise by your own account. |
 | A sleep and wake | **Held.** You, 2026-10-02. | The sleep shows in the log as one late sample; the load over the longer interval is computed as designed (§2.16); nothing wrong on screen. |
 | The first hosted test run after a merge failed to sign | Observation, 2026-09-29; cause not established. | After PR 11 merged and `main` was fast-forwarded, `xcodebuild test` failed twice before any test ran: `CodeSign ... CPULoadMeter.app: code object is not signed at all / In subcomponent: .../Contents/PlugIns/CPULoadMeter Tests.xctest`. The log shows the test bundle linked into the Debug app and the app signed before the bundle. The sources were those of the branch that had just passed, and the Release build succeeded. A plain retry failed the same way; `xcodebuild ... -configuration Debug clean` and then `test` passed, with the bundle signed first, and the next incremental run passed too. It followed a branch switch that touched many files; whether that is the cause is not known, and I found no documentation. |
+| The header's two layouts, measured | Probe, 2026-10-02: a disposable hosted test. | Through `ImageRenderer` at one pixel to the point, the header offered each width from 240 to 560: 299 × 108 up to an offered 516, and 517 × 68 at 517; its ideal size 517 × 68; offered nothing, 299 × 108. The live window, read through AppKit: `contentMinSize` and `minSize` 299 × 333, unchanged at every width tried. `setFrame(_:display:)` asking for 200 × 100 gave a frame of 299 × 332; for 520 × 100, 520 × 292; for 900 × 100, 900 × 292; the window was then put back at its 500 × 786. Not observed: where a drag stops in the two-line layout. |
 
 ## Appendix E — Evidence
 
@@ -1561,6 +1596,8 @@ Conditions for every **[O]**: Mac with Apple M2 Ultra (24 CPUs), macOS 27.0, Xco
 | `SettingsLink`; Swift Testing attachments | Apple, `SettingsLink` (macOS 14.0+; the page does not say where it may be used) and `Testing.Attachment` (Swift 6.2+, Xcode 26.0+). |
 | `nonisolated` on type declarations | Swift Evolution SE-0449, "Allow `nonisolated` to prevent global actor inference", implemented in Swift 6.1. It does not discuss the default-isolation build setting. |
 | Tools for the pixel tests and the cost check | `xcrun --find xcresulttool` and `xctrace` both resolve in Xcode 27.0; `xcresulttool export` lists an `attachments` subcommand; `xctrace list templates` includes Time Profiler and SwiftUI. |
+| `ViewThatFits` | Apple, `ViewThatFits`: the sentences quoted in B.20. |
+| `minSize` and the calls it does not constrain | Apple, `NSWindow.minSize`: *"The minimum size constraint is enforced for resizing by the user as well as for the `setFrame...` methods other than `setFrame(_:display:)` and `setFrame(_:display:animate:)`."* |
 | The repository's merge settings | `gh api repos/coreaudio-fan/CPULoadMeter`: squash merges titled by the PR with the commit messages as the body; branches deleted on merge. Identical to SourceTools'. |
 | `MenuBarExtra.init(content:label:)`: the label parameter | Apple, `MenuBarExtra.init(content:label:)`: *"A `View` to use as the label in the system menu bar."* The `MenuBarExtra` overview says nothing about how a label is drawn. |
 | Menu bar extras use black and clear; the system colors them; the menu bar is 24 pt | Apple, *Human Interface Guidelines*, *The menu bar*, "Menu bar extras": the sentence quoted in B.18, and *"The menu bar's height is 24 pt."* |
