@@ -25,7 +25,7 @@ struct SamplingPeriodTests {
 	}
 
 	@Test func thePresetsAndTheDefaultAreAsSpecified() async throws {
-		#expect(SamplingPeriod.presets.map(\.seconds) == [1, 2, 5, 10, 30])
+		#expect(SamplingPeriod.presets.map(\.seconds) == [1, 2, 5, 10, 15, 30, 45, 60])
 		#expect(SamplingPeriod.default.seconds == 1)
 		#expect(SamplingPeriod.default == SamplingPeriod.presets[0])
 	}

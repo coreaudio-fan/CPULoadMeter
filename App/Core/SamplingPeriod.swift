@@ -3,7 +3,7 @@ import Foundation
 ///	The limits of a sampling period: 1 to 60 seconds, 1 by default, which is also `top`'s default interval.
 enum SamplingPeriodLimits: SecondsLimits {
 	static let range = 1...60
-	static let presetValues = [1, 2, 5, 10, 30]
+	static let presetValues = [1, 2, 5, 10, 15, 30, 45, 60]
 	static let defaultValue = 1
 }
 
