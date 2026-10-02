@@ -1,7 +1,12 @@
 import SwiftUI
 
-///	The settings window's content: the launch checkbox, and below it the menu bar graph's period and width. Design.md,
-///	section 2.12.
+///	The settings window's content: the launch checkbox, a rule, and below it the menu bar graph's section, a header over
+///	its period and width.
+///
+///	Laid out by hand rather than as a `Form`: the form's default style on macOS puts labels in a trailing-aligned column
+///	beside a column of controls, which indented the checkbox and the section's title where both are wanted at the left
+///	edge, and gave the two sections nothing to tell them apart but a title. Here everything starts at the leading edge,
+///	the rule divides the sections, and the title is a headline. Design.md, sections 2.12 and 5.10, and D44.
 struct SettingsView: View {
 
 	///	Whether the main window opens at launch. The app reads the same key to choose its launch behavior.
@@ -21,13 +26,16 @@ struct SettingsView: View {
 	@FocusState private var isEditingWidth: Bool
 
 	var body: some View {
-		Form {
+		VStack(alignment: .leading, spacing: 12) {
 			Toggle("Open main window at launch", isOn: $isMainWindowOpenedAtLaunch)
-			Section("Menu bar graph") {
-				SettingControl(prompt: "Sample every", unit: "seconds", value: menuBarPeriod, isEditing: $isEditingPeriod)
-				SettingControl(prompt: "Draw each core", unit: "points wide", value: graphWidth, isEditing: $isEditingWidth)
-			}
+			Divider()
+				.padding(.vertical, 4)
+			Text("Menu bar graph")
+				.font(.headline)
+			SettingControl(prompt: "Sample every", unit: "seconds", value: menuBarPeriod, isEditing: $isEditingPeriod)
+			SettingControl(prompt: "Draw each core", unit: "points wide", value: graphWidth, isEditing: $isEditingWidth)
 		}
+		.frame(maxWidth: .infinity, alignment: .leading)
 		.contentShape(Rectangle())
 		.onTapGesture {
 			isEditingPeriod = false
