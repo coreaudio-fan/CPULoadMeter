@@ -3,10 +3,11 @@ import SwiftUI
 ///	The header: the processor's name and the CPU count, the machine-wide CPU usage in `top`'s wording, and the two
 ///	controls, pinned to the top of the window at its natural height.
 ///
-///	It has two layouts and takes the first that fits the width it is given. Where there is room, two lines, each with
-///	its text at the left and a control at the right. Where there is not, one column: the two texts, then the two
-///	controls below them. The controls are the same size in both; only their places change. The window can therefore be
-///	as narrow as the widest single item. Design.md, sections 2.5, 2.6, and 5.4.
+///	It has two arrangements, which `HeaderLayout` chooses between by the width it is given. Where there is room, two
+///	rows, each with its text at the left and a control at the right. Where there is not, one column: the two texts, then
+///	the two controls below them. The texts are in the same place in both, and the controls are the same size in both;
+///	only the controls' places change. The window can therefore be as narrow as the widest single piece. Design.md,
+///	sections 2.5, 2.6, and 5.4.
 struct HeaderView: View {
 
 	///	The widest the usage line gets: two digits in each of its three figures, which is the most a sum of 100 allows,
@@ -40,29 +41,12 @@ struct HeaderView: View {
 	let isEditingHistory: FocusState<Bool>.Binding
 
 	var body: some View {
-		//	The first layout whose natural width fits is the one shown. The texts and the controls are all of fixed
-		//	size, so the wide layout fits exactly when its two ends do not meet, and the column always fits, being the
-		//	last.
-		ViewThatFits(in: .horizontal) {
-			VStack(alignment: .leading, spacing: 4) {
-				HStack {
-					nameText
-					Spacer()
-					periodControl
-				}
-				HStack {
-					usageText
-					Spacer()
-					historyControl
-				}
-			}
-			VStack(alignment: .leading, spacing: 4) {
-				nameText
-				usageText
-				periodControl
-				historyControl
-			}
-			.frame(maxWidth: .infinity, alignment: .leading)
+		//	The four pieces, in the order the layout expects them.
+		HeaderLayout {
+			nameText
+			usageText
+			periodControl
+			historyControl
 		}
 		.padding(.horizontal, 12)
 		.padding(.vertical, 8)

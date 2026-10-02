@@ -8,6 +8,12 @@ struct MainView: View {
 	///	layout, with room to spare, so that a first launch does not come up in the column.
 	static let idealWidth: CGFloat = 600
 
+	///	The least height one CPU's graph is given: what the window's minimum height allows each of them.
+	static let minimumGraphHeight: CGFloat = 24
+
+	///	The height one CPU's graph has on first launch.
+	static let idealGraphHeight: CGFloat = 30
+
 	///	The processor's name, or `nil` if the kernel would not say.
 	let processorName: String?
 
@@ -41,7 +47,10 @@ struct MainView: View {
 
 			Hairline()
 
+			//	The stack's height is the window's to decide: at least the minimum for every graph, and as much more as
+			//	the window has.
 			LoadStackView(histories: histories)
+				.frame(minHeight: Self.minimumGraphHeight * CGFloat(histories.count), idealHeight: Self.idealGraphHeight * CGFloat(histories.count), maxHeight: .infinity)
 				.contentShape(Rectangle())
 				.onTapGesture {
 					isEditingPeriod = false
