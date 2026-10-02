@@ -18,19 +18,18 @@ struct SettingControlTests {
 		}
 	}
 
-	//	The same control under other limits: what the period would accept, the history length rejects, and the reverse.
+	//	The same control under other limits: what the period would accept, the history length and the width reject, and
+	//	the reverse.
 	@Test func everySettingCommitsByItsOwnRange() async throws {
-		let history = try #require(MenuBarHistoryLength(value: 90))
-		let width = try #require(GraphWidth(value: 40))
+		let width = try #require(GraphWidth(value: 45))
 
-		#expect(SettingControl<MenuBarHistoryLimits>.committedValue(from: "120", current: history).sampleCount == 120)
-		for draft in ["29", "121", "5", "abc", ""] {
-			#expect(SettingControl<MenuBarHistoryLimits>.committedValue(from: draft, current: history) == history, "\(draft)")
-		}
 		#expect(SettingControl<WindowHistoryLimits>.committedValue(from: "3600", current: .default).sampleCount == 3_600)
-		#expect(SettingControl<WindowHistoryLimits>.committedValue(from: "3601", current: .default) == .default)
-		#expect(SettingControl<GraphWidthLimits>.committedValue(from: "10", current: width).value == 10)
-		for draft in ["9", "121", "abc", ""] {
+		for draft in ["29", "3601", "5", "abc", ""] {
+			#expect(SettingControl<WindowHistoryLimits>.committedValue(from: draft, current: .default) == .default, "\(draft)")
+		}
+		#expect(SettingControl<GraphWidthLimits>.committedValue(from: "15", current: width).value == 15)
+		#expect(SettingControl<GraphWidthLimits>.committedValue(from: "60", current: width).value == 60)
+		for draft in ["14", "61", "abc", ""] {
 			#expect(SettingControl<GraphWidthLimits>.committedValue(from: draft, current: width) == width, "\(draft)")
 		}
 	}

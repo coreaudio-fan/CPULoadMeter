@@ -96,8 +96,9 @@ struct MenuBarGraphRenderingTests {
 		#expect(grid.alpha(column: 10, row: 8) == endcap)
 	}
 
-	//	The width is a setting, not the history's: two samples in a graph four points wide are two blocks of two, and
-	//	eight samples in it are four peaks.
+	//	The view fits whatever history it is handed to its width: two samples in a graph four points wide are two blocks
+	//	of two, and eight samples in it are four peaks. The app hands it a history as long as the graph is wide, so this
+	//	is what is drawn only for the frame between a new width and the resized history.
 	@Test func theHistoryIsFittedToTheGraphWidth() async throws {
 		let blocks = try grid([[16, 8]], graphWidth: 4)
 		let peaks = try grid([[12, 16, 0, 8, 12, 6, 0, 0]], graphWidth: 4)
@@ -116,6 +117,7 @@ struct MenuBarGraphRenderingTests {
 	}
 
 	@Test func theWidthIsEveryGraphWithADividerAndGapsAroundIt() async throws {
+		#expect(MenuBarGraph.width(cpuCount: 24, graphWidth: 15) == 483)
 		#expect(MenuBarGraph.width(cpuCount: 24, graphWidth: 30) == 843)
 		#expect(MenuBarGraph.width(cpuCount: 24, graphWidth: 60) == 1_563)
 		#expect(MenuBarGraph.width(cpuCount: 1, graphWidth: 60) == 68)

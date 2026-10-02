@@ -15,17 +15,13 @@ enum DefaultsKey {
 	///	default.
 	static let historySamples = "historySamples"
 
-	///	The width of one CPU's graph in the menu bar in whole points. An `Int`, 30 when absent; a stored value out of
-	///	range falls back to the default.
+	///	The width of one CPU's graph in the menu bar in whole points, which is also its history in samples. An `Int`, 15
+	///	when absent; a stored value out of range falls back to the default.
 	static let menuBarGraphWidth = "menuBarGraphWidth"
 
 	///	The menu bar graph's sampling period in whole seconds. An `Int`, 1 when absent; a stored value out of range
 	///	falls back to the default.
 	static let menuBarPeriodSeconds = "menuBarPeriodSeconds"
-
-	///	The menu bar graph's history length in samples. An `Int`, 60 when absent; a stored value out of range falls back
-	///	to the default.
-	static let menuBarHistorySamples = "menuBarHistorySamples"
 
 	///	The main window's last width in points. A `Double`, absent until the window has been shown.
 	static let mainWindowWidth = "mainWindowWidth"
