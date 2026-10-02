@@ -36,18 +36,19 @@ struct CPULoadMeterApp: App {
 	///	The processor's name, read once at launch; `nil` if the kernel would not say.
 	private let processorName: String?
 
-	///	Reads the processor's name and the CPU count, creates each monitor from its stored period and history length,
-	///	and writes the launch diagnostic. Neither monitor samples until its view appears, so the launch line's CPU count
-	///	is a read of its own. The defaults are read here directly because the property wrappers above are not usable
-	///	before the app exists; they read the same store.
+	///	Reads the processor's name and the CPU count, creates the window's monitor from its stored period and history
+	///	length and the menu bar's from its stored period and graph width, which is its history, and writes the launch
+	///	diagnostic. Neither monitor samples until its view appears, so the launch line's CPU count is a read of its own.
+	///	The defaults are read here directly because the property wrappers above are not usable before the app exists;
+	///	they read the same store.
 	init() {
 		let defaults = UserDefaults.standard
 		let period = (defaults.object(forKey: DefaultsKey.samplingPeriodSeconds) as? Int).flatMap(SamplingPeriod.init(seconds:)) ?? .default
 		let history = (defaults.object(forKey: DefaultsKey.historySamples) as? Int).flatMap(WindowHistoryLength.init(value:)) ?? .default
 		let menuBarPeriod = (defaults.object(forKey: DefaultsKey.menuBarPeriodSeconds) as? Int).flatMap(SamplingPeriod.init(seconds:)) ?? .default
-		let menuBarHistory = (defaults.object(forKey: DefaultsKey.menuBarHistorySamples) as? Int).flatMap(MenuBarHistoryLength.init(value:)) ?? .default
+		let menuBarWidth = (defaults.object(forKey: DefaultsKey.menuBarGraphWidth) as? Int).flatMap(GraphWidth.init(value:)) ?? .default
 		_monitor = State(initialValue: LoadMonitor(name: "window", period: period, sampleCount: history.sampleCount))
-		_menuBarMonitor = State(initialValue: LoadMonitor(name: "menu bar", period: menuBarPeriod, sampleCount: menuBarHistory.sampleCount))
+		_menuBarMonitor = State(initialValue: LoadMonitor(name: "menu bar", period: menuBarPeriod, sampleCount: menuBarWidth.sampleCount))
 		processorName = readProcessorName()
 		Diagnostics.logLaunch(processorName: processorName, cpuCount: (try? readProcessorTicks())?.count ?? 0)
 	}
@@ -90,10 +91,12 @@ struct CPULoadMeterApp: App {
 		//	itself: the content reports it above, and the placement below restores it. Design.md, B.8.
 		.restorationBehavior(.disabled)
 
-		//	The content's ideal size is the view's, without the safe-area inset, so a first launch comes up one inset
-		//	shorter than ideal. Every later launch uses the stored rect, which is exact.
+		//	A first launch opens at the window's minimum size (D43), which is what the content answers when offered no
+		//	size at all: the header's column, and every graph at its least height. The answer is the view's size,
+		//	without the safe-area inset, and the window still comes up at exactly its minimum, which is the inset
+		//	taller; the system holds it there (observed 2026-10-02, D.6). Every later launch uses the stored rect.
 		.defaultWindowPlacement { content, _ in
-			WindowPlacement(size: storedWindowSize ?? content.sizeThatFits(.unspecified))
+			WindowPlacement(size: storedWindowSize ?? content.sizeThatFits(.zero))
 		}
 
 		Settings {

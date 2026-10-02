@@ -17,10 +17,8 @@ struct MenuBarGraphLabel: View {
 	///	The menu bar graph's period, as the settings window stores it; the monitor persists nothing.
 	@AppStorage(DefaultsKey.menuBarPeriodSeconds) private var periodSeconds = SamplingPeriod.default.seconds
 
-	///	The menu bar graph's history length in samples, likewise.
-	@AppStorage(DefaultsKey.menuBarHistorySamples) private var historySamples = MenuBarHistoryLength.default.value
-
-	///	The width of one CPU's graph, likewise. It bears on the drawing alone; the monitor never hears of it.
+	///	The width of one CPU's graph, likewise, which is also how many samples the graph holds: one for every point
+	///	(Design.md, D35).
 	@AppStorage(DefaultsKey.menuBarGraphWidth) private var graphWidthPoints = GraphWidth.default.value
 
 	///	The display's scale, so that the rendered image has a pixel per device pixel.
@@ -47,13 +45,14 @@ struct MenuBarGraphLabel: View {
 		}
 
 		//	A settings change reaches the monitor from here, the way the window's reach its monitor from the window's
-		//	root view. The two are independent: the period is the rate the samples arrive at, and the history length is
-		//	how many of them the graph holds (Design.md, D32).
+		//	root view. The period is the rate the samples arrive at (Design.md, D32); the width is how many of them the
+		//	graph holds, and for the frame between the new width and the resized history the drawing fits the one to the
+		//	other.
 		.onChange(of: periodSeconds) {
 			applyPeriod()
 		}
-		.onChange(of: historySamples) {
-			monitor.setSampleCount((MenuBarHistoryLength(value: historySamples) ?? .default).sampleCount)
+		.onChange(of: graphWidthPoints) {
+			monitor.setSampleCount((GraphWidth(value: graphWidthPoints) ?? .default).sampleCount)
 		}
 	}
 

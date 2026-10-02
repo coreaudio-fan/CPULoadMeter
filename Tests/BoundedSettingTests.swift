@@ -28,28 +28,23 @@ struct BoundedSettingTests {
 	@Test func everySettingsLimitsAreSound() async throws {
 		expectSoundLimits(SamplingPeriodLimits.self)
 		expectSoundLimits(WindowHistoryLimits.self)
-		expectSoundLimits(MenuBarHistoryLimits.self)
 		expectSoundLimits(GraphWidthLimits.self)
 	}
 
 	@Test func everySettingHoldsItsBounds() async throws {
 		expectBounds(SamplingPeriodLimits.self)
 		expectBounds(WindowHistoryLimits.self)
-		expectBounds(MenuBarHistoryLimits.self)
 		expectBounds(GraphWidthLimits.self)
 	}
 
 	@Test func theLimitsAreAsSpecified() async throws {
 		#expect(SamplingPeriodLimits.range == 1...60)
-		#expect(WindowHistoryLimits.range == 30...3_600)
-		#expect(WindowHistoryLimits.presetValues == [60, 300, 900, 3_600])
+		#expect(WindowHistoryLimits.range == 15...600)
+		#expect(WindowHistoryLimits.presetValues == [15, 30, 45, 60, 90, 120, 150, 180, 300, 600])
 		#expect(WindowHistoryLength.default.sampleCount == 300)
-		#expect(MenuBarHistoryLimits.range == 30...120)
-		#expect(MenuBarHistoryLimits.presetValues == [30, 60, 90, 120])
-		#expect(MenuBarHistoryLength.default.sampleCount == 60)
-		#expect(GraphWidthLimits.range == 10...120)
-		#expect(GraphWidthLimits.presetValues == [20, 30, 40, 60])
-		#expect(GraphWidth.default.value == 30)
+		#expect(GraphWidthLimits.range == 15...60)
+		#expect(GraphWidthLimits.presetValues == [15, 20, 25, 30, 45, 60])
+		#expect(GraphWidth.default.value == 15)
 	}
 
 }

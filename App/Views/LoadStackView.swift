@@ -42,7 +42,6 @@ struct LoadStackView: View {
 			}
 			context.fill(boundaries, with: .style(.separator))
 		}
-		.frame(minHeight: 8 * CGFloat(histories.count), idealHeight: 20 * CGFloat(histories.count), maxHeight: .infinity)
 	}
 
 	///	The height of every row: the height shared equally, so that adjacent rows may differ by a pixel.

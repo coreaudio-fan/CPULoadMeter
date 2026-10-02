@@ -4,8 +4,9 @@ import SwiftUI
 ///	Design.md, section 5.3.
 struct MainView: View {
 
-	///	The width the window opens at on first launch (Design.md, section 2.5).
-	static let idealWidth: CGFloat = 480
+	///	The least height one CPU's graph is given: what the window's minimum height allows each of them, which is also
+	///	what it opens with on first launch, the window's first size being its minimum (Design.md, section 2.5 and D43).
+	static let minimumGraphHeight: CGFloat = 24
 
 	///	The processor's name, or `nil` if the kernel would not say.
 	let processorName: String?
@@ -40,14 +41,16 @@ struct MainView: View {
 
 			Hairline()
 
+			//	The stack's height is the window's to decide: at least the minimum for every graph, and as much more as
+			//	the window has. The window's first size is its minimum, which the app's placement asks the content for.
 			LoadStackView(histories: histories)
+				.frame(minHeight: Self.minimumGraphHeight * CGFloat(histories.count), maxHeight: .infinity)
 				.contentShape(Rectangle())
 				.onTapGesture {
 					isEditingPeriod = false
 					isEditingHistory = false
 				}
 		}
-		.frame(idealWidth: Self.idealWidth)
 	}
 
 }

@@ -7,7 +7,7 @@ import SwiftUI
 ///	sections 2.11, 2.12, and 5.9; the reasoning in B.2.
 struct SettingControl<Limits: SettingLimits>: View {
 
-	///	The words before the field: "Update every".
+	///	The words before the field: "Sample every".
 	let prompt: String
 
 	///	The words after it: "seconds".
