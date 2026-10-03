@@ -1,7 +1,12 @@
 import SwiftUI
 
-///	The settings window's content: the launch checkbox, and below it the menu bar graph's period and width. Design.md,
-///	section 2.12.
+///	The settings window's content: the launch checkbox, a rule, and below it the menu bar graph's section, a header over
+///	its period and width.
+///
+///	Laid out by hand rather than as a `Form`: the form's default style on macOS puts labels in a trailing-aligned column
+///	beside a column of controls, which indented the checkbox and the section's title where both are wanted at the left
+///	edge, and gave the two sections nothing to tell them apart but a title. Here everything starts at the leading edge,
+///	the rule divides the sections, and the title is a headline. Design.md, sections 2.12 and 5.10, and D44.
 struct SettingsView: View {
 
 	///	Whether the main window opens at launch. The app reads the same key to choose its launch behavior.
@@ -20,19 +25,47 @@ struct SettingsView: View {
 	///	Whether the width field has focus, likewise.
 	@FocusState private var isEditingWidth: Bool
 
+	///	Whether the window is in the moment of opening, during which the focus the system gives its first field is
+	///	declined: the window opens with no field editing, and the user clicks or tabs into the one they mean to edit.
+	///	The moment ends when that focus has been declined once, or half a second after appearing, whichever is first; a
+	///	focus given after that is the user's.
+	@State private var isOpening = false
+
 	var body: some View {
-		Form {
+		VStack(alignment: .leading, spacing: 12) {
 			Toggle("Open main window at launch", isOn: $isMainWindowOpenedAtLaunch)
-			Section("Menu bar graph") {
+			Divider()
+				.padding(.vertical, 4)
+			Text("Menu bar graph")
+				.font(.headline)
+
+			//	The two controls' fields in one column: the stack aligns them on the fields' leading edges, so the
+			//	control with the shorter prompt sits further right, and the one with the longer stays at the leading
+			//	edge.
+			VStack(alignment: .settingField, spacing: 12) {
 				SettingControl(prompt: "Sample every", unit: "seconds", value: menuBarPeriod, isEditing: $isEditingPeriod)
 				SettingControl(prompt: "Draw each core", unit: "points wide", value: graphWidth, isEditing: $isEditingWidth)
 			}
 		}
-		.contentShape(Rectangle())
-		.onTapGesture {
-			isEditingPeriod = false
-			isEditingWidth = false
+		.frame(maxWidth: .infinity, alignment: .leading)
+
+		//	The system makes the first text field the window's first responder as the window opens, and the view's
+		//	default-focus preference did not change that (observed 2026-10-02; Design.md, D.6). So the focus is taken
+		//	back the moment it arrives, while the window is opening.
+		.onAppear {
+			isOpening = true
+			Task {
+				try? await Task.sleep(for: .milliseconds(500))
+				isOpening = false
+			}
 		}
+		.onChange(of: isEditingPeriod) {
+			if isEditingPeriod && isOpening {
+				isOpening = false
+				isEditingPeriod = false
+			}
+		}
+
 		.padding(20)
 		.frame(width: 360)
 	}
